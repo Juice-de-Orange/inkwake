@@ -74,7 +74,7 @@ jobs:
           WARM_ON_START: 'false'
         run: |
           docker compose up -d --build
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8099/healthz; then break; fi
             sleep 2
           done
