@@ -1,0 +1,94 @@
+# inkwake -- one service, one data volume.
+#
+#   cp .env.example .env        # set PUBLIC_BASE_URL at least
+#   docker compose up -d --build
+#   docker compose exec inkwake python -m app.cli device add --label "Hallway"
+#
+# The board needs to reach PUBLIC_BASE_URL. The port below is bound to
+# loopback by default, for a reverse proxy (Caddy, nginx, Traefik) that
+# terminates TLS in front of it. On a trusted LAN without a proxy, set
+# INKWAKE_BIND=0.0.0.0 and use http://<host>:8099 as PUBLIC_BASE_URL.
+services:
+  inkwake:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: inkwake:local
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    # mode=1777 is required: the container runs as UID 10001, a default tmpfs
+    # belongs to root, and every write would end in EACCES.
+    tmpfs:
+      - /tmp:mode=1777,size=64m
+    ports:
+      - "${INKWAKE_BIND:-127.0.0.1}:${INKWAKE_PORT:-8099}:8000"
+    # An explicit whitelist: what is not listed here does not reach the
+    # container. Every value is spelled out, so this block doubles as the list
+    # of what can be configured. .env.example explains each one.
+    environment:
+      TZ: ${TZ_NAME:-Europe/Vienna}
+      TZ_NAME: ${TZ_NAME:-Europe/Vienna}
+      DATA_DIR: /data
+      SIGHTINGS_DIR: /sightings
+      # The address the BOARD uses to reach this server, not the container's.
+      # A loopback address here hands the board an image_url on its own
+      # loopback: it never loads a picture while the server books the frame as
+      # painted. Hence no default -- compose refuses to start without it.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env (the URL the board uses to reach this server)}
+      # Guards /preview and /api/internal/status. Both render or describe a
+      # frame, and a frame can carry names from the bookings view.
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      WEATHER_LAT: ${WEATHER_LAT:-48.2082}
+      WEATHER_LON: ${WEATHER_LON:-16.3738}
+      EVENTS_ICS_URLS: ${EVENTS_ICS_URLS:-}
+      EVENTS_COUNT: ${EVENTS_COUNT:-6}
+      EVENTS_DAYS_AHEAD: ${EVENTS_DAYS_AHEAD:-7}
+      EVENTS_TITLE: ${EVENTS_TITLE:-Termine}
+      SOURCES_DSN: ${SOURCES_DSN:-}
+      BOOKINGS_VIEW: ${BOOKINGS_VIEW:-inkwake_bookings}
+      BOOKINGS_COUNT: ${BOOKINGS_COUNT:-3}
+      BOOKINGS_TITLE: ${BOOKINGS_TITLE:-Buchungen}
+      SIGHTINGS_VIEW: ${SIGHTINGS_VIEW:-inkwake_sightings}
+      SIGHTING_TITLE: ${SIGHTING_TITLE:-Sichtung}
+      SOURCE_CACHE_TTL_S: ${SOURCE_CACHE_TTL_S:-3600}
+      HTTP_TIMEOUT_S: ${HTTP_TIMEOUT_S:-15.0}
+      # Mirror of HTTP_TIMEOUT_MS in firmware/src/config.h. Not a setting but
+      # a fact about the board: changing it means flashing, not restarting.
+      DEVICE_HTTP_TIMEOUT_S: ${DEVICE_HTTP_TIMEOUT_S:-8.0}
+      # Warms the sources shortly before each wake time. A battery setting,
+      # not a freshness one: the board keeps its radio up at ~120 mA while the
+      # server waits on upstreams.
+      PREWARM_LEAD_S: ${PREWARM_LEAD_S:-300}
+      WARM_ON_START: ${WARM_ON_START:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Sent to Open-Meteo and the calendar feeds. Empty means the default,
+      # which names the project so a feed operator knows who is asking.
+      USER_AGENT: ${USER_AGENT:-}
+      # Wake times, panel-care and battery thresholds are NOT here: they are
+      # per device, set with `python -m app.cli device set`.
+    mem_limit: 512m
+    pids_limit: 256
+    volumes:
+      # The device registry (SQLite), rendered frames, OTA images and the
+      # calendar cache. A named volume and not a host bind, and that is
+      # load-bearing: Docker seeds a fresh named volume from the image's /data
+      # including its ownership (UID 10001). A host directory would be
+      # root-owned and the service could not write a single frame.
+      #
+      # The registry holds the device token hashes -- back this volume up.
+      - inkwake_data:/data
+      # Optional wildlife-camera pictures for the sightings view. Read-only:
+      # this service never writes other people's data.
+      - ${SIGHTINGS_HOST_DIR:-./sightings}:/sightings:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  inkwake_data:

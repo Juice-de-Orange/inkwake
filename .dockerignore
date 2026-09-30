@@ -1,0 +1,62 @@
+# Keeps the build context hermetic — the image must be a function of the
+# repository, not of whatever the last local test run left lying around.
+#
+# The build context is the repository root, which also holds the firmware and
+# the documentation, and every one of those has to be excluded by hand --
+# .pio alone is hundreds of megabytes.
+
+# Python build and test residue. __pycache__ is the one that actually bites:
+# a .pyc compiled by another interpreter is copied in, ignored, and shipped
+# forever as dead weight in every layer.
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtualenvs. The image builds its own; a host venv would be several hundred
+# megabytes of binaries built for another platform.
+.venv/
+venv/
+
+# Tests do not run inside the image and their fixtures can be large.
+tests/
+
+# Local runtime state. data/ holds rendered frames and the device registry —
+# in production that is a volume, and baking a copy into the image would ship
+# token hashes and let a fresh container answer with last month's frame.
+#
+# Deliberately no blanket `*.png`: assets/ is allowed to grow icons or a
+# fallback frame, and a pattern that quietly dropped them would show up as a
+# missing glyph in production and nowhere else.
+data/
+*.sqlite3
+*.out
+
+# Secrets never enter the context, not even to be ignored later by the runtime.
+.env
+.env.*
+!.env.example
+
+# vcs and editor
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# Siblings of the server that are not part of the image. The firmware is built
+# by PlatformIO on a workstation, the docs are read by people, the scripts run
+# on a checkout. Left as an explicit list rather than a whitelist: a future
+# sibling should fail loudly by bloating the context, not silently by being
+# excluded.
+firmware/
+docs/
+scripts/
+.github/
+sightings/
+*.md
+.gitattributes

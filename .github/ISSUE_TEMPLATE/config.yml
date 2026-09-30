@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Juice-de-Orange/inkwake/security/advisories/new
+    about: Please report security problems privately, not as a public issue.
+  - name: Documentation
+    url: https://github.com/Juice-de-Orange/inkwake/tree/main/docs
+    about: Deployment, data sources and development.

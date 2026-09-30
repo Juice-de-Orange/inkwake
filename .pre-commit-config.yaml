@@ -1,0 +1,7 @@
+# Local guard against committing secrets: `pip install pre-commit && pre-commit install`.
+# CI runs the same scanner over the full history (.github/workflows/ci.yml, job "secrets").
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

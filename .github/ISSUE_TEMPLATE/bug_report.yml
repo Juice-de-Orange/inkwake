@@ -1,0 +1,53 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Security problems go through private reporting instead
+        (Security → Report a vulnerability), never a public issue.
+        Please remove tokens, calendar links, public IPs and hostnames from anything you paste.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead? A photo of the panel helps.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. .env with …
+        2. docker compose up -d
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Server commit (`git rev-parse --short HEAD`) and firmware version (shown on the setup screen).
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - server / frame rendering
+        - data sources (weather, ICS, Postgres views)
+        - device registry / CLI
+        - firmware
+        - deployment (Docker, reverse proxy)
+        - docs
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs (redacted)
+      description: Server log (`docker compose logs inkwake`) and/or the board's serial log.
+      render: shell

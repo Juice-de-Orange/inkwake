@@ -1,0 +1,40 @@
+# Local Python environment and caches.
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Secrets and local runtime state. .env can hold a database password and
+# private calendar links; data/ holds the device registry (token hashes).
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+.claude/settings.local.json
+.mcp.json
+.opensource/
+data/
+sightings/
+*.sqlite3
+*.sqlite3-*
+*.out
+
+# PlatformIO build tree. Hundreds of megabytes, and .pio/libdeps holds the
+# vendored M5 libraries that test_deploy.py reads when they happen to be there.
+.pio/
+
+# Rendered reference frames from test_layout.py. Regenerated on every run.
+tests/out/
+
+# Firmware images are build output; register them with the CLI, do not commit.
+*.bin
+*.elf
+
+# Archives and editor state.
+*.zip
+.idea/
+.vscode/
