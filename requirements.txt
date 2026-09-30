@@ -1,9 +1,9 @@
 fastapi==0.141.1
-uvicorn[standard]==0.41.0
+uvicorn[standard]==0.54.0
 pillow==12.3.0
-numpy==2.5.2
+numpy==2.5.3
 httpx==0.28.1
 icalendar==7.3.0
 python-dateutil==2.9.0.post0
 # Only the optional bookings/sightings source talks to Postgres.
-psycopg[binary]==3.3.4
+psycopg[binary]==3.3.6
