@@ -6,7 +6,7 @@ pytest==9.1.1
 # Shuffles test order on every run. It has already caught one real state leak
 # between tests in this suite, so a single green run is not evidence -- run it
 # more than once. Removing it would make the suite quieter and weaker.
-pytest-randomly==4.1.0
+pytest-randomly==5.0.0
 # test_server.py drives the ASGI app through httpx's ASGITransport rather than
 # a live server; anyio is what actually runs the lifespan.
 pytest-asyncio==1.4.0
