@@ -60,17 +60,17 @@ jobs:
   docker:
     name: docker build
     runs-on: ubuntu-latest
+    # Job-wide: every compose command interpolates the file, the cleanup steps too.
+    env:
+      PUBLIC_BASE_URL: https://eink.example.com
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
       - name: Compose file is valid
-        env:
-          PUBLIC_BASE_URL: https://eink.example.com
         run: docker compose config --quiet
       - name: Build and start the image, then probe it
         env:
-          PUBLIC_BASE_URL: https://eink.example.com
           WARM_ON_START: 'false'
         run: |
           docker compose up -d --build
