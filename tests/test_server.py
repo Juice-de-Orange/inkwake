@@ -1053,6 +1053,16 @@ def test_a_wake_without_a_battery_reading_is_still_offered_the_update(env: Env) 
     assert body["update_firmware"] is True
 
 
+def test_an_image_whose_file_is_missing_is_not_offered(env: Env) -> None:
+    """Condition 6: a registry restored without the firmware directory still
+    names the image. Offering it would send the board to a 404 on every wake."""
+    record = _seed_firmware(env)
+    (settings.firmware_dir / record.file_path).unlink()
+
+    body = env.display(FW_VERSION="0.1.0", PERCENT_CHARGED="80")
+    assert body["update_firmware"] is False
+
+
 def test_an_older_assigned_version_is_offered_too(env: Env) -> None:
     """Condition 3 is "differs", not "newer": versions are never ordered, so
     assigning an older image is how a downgrade is done. docs/deploy.md says so."""
