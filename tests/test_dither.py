@@ -484,13 +484,13 @@ def test_400x300_stays_under_two_seconds(night_frame, monkeypatch):
     # two-ink table - the same cost as the six-ink one.
     monkeypatch.setattr(dither, "_LUT_CACHE", {})
 
-    start = time.perf_counter()
+    start = time.process_time()
     dither.dither_photo(night_frame, (400, 300), "floyd")
-    cold = time.perf_counter() - start
+    cold = time.process_time() - start
 
-    start = time.perf_counter()
+    start = time.process_time()
     dither.dither_photo(night_frame, (400, 300), "atkinson")
-    warm = time.perf_counter() - start
+    warm = time.process_time() - start
 
     print(f"\n400x300: cold (with LUT build) {cold:.3f} s, warm atkinson {warm:.3f} s")
     assert cold < 2.0

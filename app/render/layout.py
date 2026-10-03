@@ -896,8 +896,10 @@ def render_dashboard(data: Dashboard, settings: Optional[Settings] = None) -> Im
             y += block.height
         if not data.bookings:
             # Only when there really are none. "Keine Buchungen" under a section
-            # that was merely too short would be a lie the reader cannot check.
-            p.text((x0, y), "Keine Buchungen", f_body, BLACK)
+            # that was merely too short would be a lie the reader cannot check --
+            # and so would it be while the source cannot be reached.
+            unknown = "bookings" in data.failures
+            p.text((x0, y), "Buchungen nicht abrufbar" if unknown else "Keine Buchungen", f_body, BLACK)
             y += line_height(f_body) + _BOOKING_GAP
         elif hidden:
             # "weitere" only when something is actually shown above it - a lone

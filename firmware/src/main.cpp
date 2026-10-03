@@ -463,10 +463,12 @@ void setup() {
     }
 
     // Sentinel-gated, so this is painted once per state and not once per wake.
-    const char *sentinel =
-        (store::authFailures() >= AUTH_FAIL_BEFORE_PORTAL) ? ETAG_LOCAL_AUTH : ETAG_LOCAL_SETUP;
+    // Decide once and derive the sentinel from it: comparing the two string literals by pointer
+    // only works while the compiler happens to merge identical literals.
+    const bool auth_problem = store::authFailures() >= AUTH_FAIL_BEFORE_PORTAL;
+    const char *sentinel = auth_problem ? ETAG_LOCAL_AUTH : ETAG_LOCAL_SETUP;
     if (!alreadyShowing(sentinel)) {
-      if (sentinel == ETAG_LOCAL_AUTH) {
+      if (auth_problem) {
         showAuthProblem();
       } else {
         showPortalInstructions();

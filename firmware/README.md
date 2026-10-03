@@ -111,9 +111,11 @@ pio run -t clean
 pio run -t erase
 ```
 
-A successful build ends like this — freshly measured with
+A successful build ends like this — measured with
 `pio run -e papercolor`, platform-espressif32 7.0.1, arduino-esp32 2.0.17,
-M5Unified 0.2.20 / M5GFX 0.2.28 / M5PM1 1.0.7:
+M5Unified 0.2.20 / M5GFX 0.2.28 / M5PM1 1.0.7. The library versions in `platformio.ini` are `^`
+ranges, so a later build resolves newer releases and the byte counts move a little (1 378 817 bytes
+of flash with M5Unified 0.2.25 / M5GFX 0.2.32 in October 2026):
 
 ```
 RAM:   [==        ]  15.4% (used 50384 bytes from 327680 bytes)
@@ -123,8 +125,8 @@ Flash: [==        ]  20.8% (used 1362941 bytes from 6553600 bytes)
 
 The seconds figure is a full rebuild of the project's own sources with the
 toolchain already downloaded; if nothing changed, it is around 11 seconds. The
-two memory lines are the part that stays comparable — if you get something
-different there, the build used different flags.
+two memory lines are the part that stays comparable — a large difference there
+means the build used different flags; a small one comes from newer library releases.
 
 #### Why the monitor usually stays empty
 

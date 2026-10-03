@@ -18,7 +18,8 @@ secrets.*
 .mcp.json
 .opensource/
 data/
-sightings/
+sightings/*
+!sightings/.gitkeep
 *.sqlite3
 *.sqlite3-*
 *.out

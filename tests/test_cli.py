@@ -158,6 +158,22 @@ def test_firmware_add_copies_hashes_and_can_be_assigned(capsys, tmp_path) -> Non
     assert device is not None and device.firmware_id is None
 
 
+def test_firmware_add_checks_the_version_compiled_into_the_image(capsys, tmp_path) -> None:
+    image = tmp_path / "firmware.bin"
+    image.write_bytes(b"\xe9" + b"x" * 64 + b"INKWAKE-FW-VERSION:1.0.1\x00" + b"y" * 64)
+
+    code, _, err = _run(capsys, "firmware", "add", str(image), "--version", "1.0.2")
+    assert code == 1
+    assert "1.0.2" in err and "1.0.1" in err
+    # Refused before anything is copied or registered.
+    assert not (tmp_path / "firmware").exists() or not list((tmp_path / "firmware").iterdir())
+
+    code, out, _ = _run(capsys, "firmware", "add", str(image), "--version", "1.0.1")
+    assert code == 0, out
+    (firmware,) = _store(tmp_path).list_firmware()
+    assert firmware.version == "1.0.1"
+
+
 def test_firmware_add_refuses_an_empty_or_missing_file(capsys, tmp_path) -> None:
     empty = tmp_path / "empty.bin"
     empty.write_bytes(b"")
