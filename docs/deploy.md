@@ -91,9 +91,38 @@ docker compose exec inkwake python -m app.cli device set <device-id> --firmware 
 ```
 
 `--version` must equal `FW_VERSION` compiled into the image (`verify-image.py`
-prints it). The board downloads an offered image only when its battery allows,
-never in the same wake as a repaint, and never the same digest twice. OTA has not
-yet been exercised on real hardware; see *Known gaps* in the firmware README.
+prints it). `firmware add` runs the same checks as `verify-image.py` and
+registers nothing when one fails:
+
+- the file is an ESP32-S3 application image (magic byte, chip id, app descriptor),
+- it is complete: every segment is there, the checksum and the SHA-256 the build
+  appended match, and nothing follows them — a download that stopped halfway
+  fails here,
+- it carries the `INKWAKE-FW-VERSION:` marker exactly once, and the marker
+  equals `--version`,
+- its size is inside what the board accepts for a download (512 KiB to 4 MiB),
+- nothing in it is shaped like a device token.
+
+That establishes that the file is the one the build wrote for this board, not
+that it boots. `--force` registers a file in spite of failed checks (a version
+that contradicts the marker stays refused); the board then has only its own.
+
+**When an image is offered.** On a wake, the server offers the image assigned to
+the device if the board reports a version in that request and the version
+**differs** from the assigned one. Versions are compared, never ordered: assign
+an older image and the board is offered the downgrade. `device set <id>
+--firmware none` stops the offer.
+
+**Battery.** The offer is held back while the charge the board reports in that
+wake is below the device's `--ota-min-battery-pct` (default 50). A wake that
+carries no battery reading — the firmware omits it when the PMIC read fails —
+is *not* held back, so a board with a broken reading can still be updated. The
+board applies its own floor on top (3600 mV, `OTA_MIN_BATTERY_MV`), with the
+same rule for a missing reading.
+
+The board never downloads in the same wake as a repaint and never fetches the
+same digest twice. OTA has not yet been exercised on real hardware; see *Known
+gaps* in the firmware README.
 
 ## Backups
 
@@ -107,6 +136,28 @@ docker compose exec -T inkwake python -c \
   "import sqlite3; s=sqlite3.connect('/data/inkwake.sqlite3'); d=sqlite3.connect('/tmp/b.sqlite3'); s.backup(d); d.close()"
 docker compose exec -T inkwake cat /tmp/b.sqlite3 > inkwake-backup.sqlite3
 ```
+
+### Restore
+
+Stop the server, write the file back into the volume, start again:
+
+```bash
+docker compose stop inkwake
+# A one-off container on the same volume, as the same user the server runs as.
+# The -wal/-shm files belong to the database being replaced and must go with it.
+docker compose run --rm -T --no-deps inkwake sh -c \
+  'cat > /data/inkwake.sqlite3 && rm -f /data/inkwake.sqlite3-wal /data/inkwake.sqlite3-shm' \
+  < inkwake-backup.sqlite3
+docker compose start inkwake
+docker compose exec inkwake python -m app.cli device list
+```
+
+The devices, their settings and their tokens are back as they were at backup
+time; a device added after the backup is gone and needs `device add` again.
+The firmware *catalogue* is in the database but the image files are not: after
+restoring only `inkwake.sqlite3` onto a fresh volume, remove and re-add each
+image (`firmware remove`, `firmware add`) — until then the server offers an
+update it cannot deliver. Restoring the whole volume avoids that.
 
 ## Updating
 

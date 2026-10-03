@@ -55,8 +55,9 @@ how long to sleep.
   each wake so the board's radio is not kept waiting.
 - **Device registry in SQLite**, managed with a small CLI. Devices authenticate
   with a per-device token that is shown once; only its SHA-256 is stored.
-- **Over-the-air updates** for registered firmware images, offered only when the
-  battery can afford it and never in the same wake as a repaint.
+- **Over-the-air updates** for registered firmware images, held back while the
+  reported charge is below a per-device threshold and never offered in the same
+  wake as a repaint.
 
 ## Architecture
 
@@ -99,7 +100,8 @@ You need Docker with Compose on a machine the board can reach.
 git clone https://github.com/Juice-de-Orange/inkwake.git
 cd inkwake
 cp .env.example .env            # set PUBLIC_BASE_URL: the address the BOARD reaches the server at,
-                                # e.g. http://192.168.1.20:8099 on a LAN without a domain
+                                # e.g. http://192.168.1.20:8099 on a LAN without a domain --
+                                # and then INKWAKE_BIND=0.0.0.0 as well (see below)
 docker compose up -d --build
 docker compose exec inkwake python -m app.cli device add --label "Hallway"
 ```
@@ -111,8 +113,11 @@ and open `/preview` with the header `X-Admin-Key` to see a live frame.
 
 The compose file binds the port to `127.0.0.1:8099`, for a reverse proxy that
 terminates TLS (the firmware verifies certificates against the ESP-IDF CA
-bundle, so use a publicly trusted certificate). Deployment details, the reverse
-proxy and backups: [docs/deploy.md](docs/deploy.md).
+bundle, so use a publicly trusted certificate). **Without a reverse proxy, on a
+trusted LAN, set `INKWAKE_BIND=0.0.0.0` in `.env`** — with the default the
+server answers only on the host itself and the board gets "connection refused".
+Deployment details, the reverse proxy, backups and restore:
+[docs/deploy.md](docs/deploy.md).
 
 ## Operating it
 
@@ -120,9 +125,16 @@ proxy and backups: [docs/deploy.md](docs/deploy.md).
 docker compose exec inkwake python -m app.cli device list
 docker compose exec inkwake python -m app.cli device set <id> --slots 06:50,14:50,19:50
 docker compose exec inkwake python -m app.cli device set <id> --min-refresh-temp-c 12
-docker compose exec inkwake python -m app.cli firmware add /path/firmware.bin --version 1.0.1
+
+# Over-the-air update. The CLI runs inside the container, so the image has to get there first:
+docker compose exec -T inkwake sh -c 'cat > /tmp/firmware.bin' < firmware/.pio/build/papercolor/firmware.bin
+docker compose exec inkwake python -m app.cli firmware add /tmp/firmware.bin --version 1.0.1
 docker compose exec inkwake python -m app.cli device set <id> --firmware <firmware-id>
 ```
+
+`firmware add` refuses a file that is not a complete inkwake image for this
+board, or whose compiled-in version differs from `--version`; the details are in
+[docs/deploy.md](docs/deploy.md#5-over-the-air-firmware-updates).
 
 Wake times are the biggest battery lever there is: each daily slot costs roughly
 430 mAh a year, more than every firmware optimisation combined. The defaults

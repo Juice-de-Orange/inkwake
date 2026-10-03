@@ -1036,6 +1036,32 @@ def test_no_offer_on_a_cell_that_cannot_afford_it(env: Env) -> None:
     assert body["update_firmware"] is True
 
 
+def test_a_wake_without_a_battery_reading_is_still_offered_the_update(env: Env) -> None:
+    """Condition 5 holds back a *reported* low charge, not a missing one.
+
+    The firmware omits Percent-Charged and Battery-Voltage exactly when every
+    PMIC read failed, and treats that case the same way in its own gate
+    (main.cpp: `battery_mv == 0 || battery_mv >= OTA_MIN_BATTERY_MV`). If the
+    server refused here, a board whose battery read is broken could never be
+    updated -- not even with the image that fixes the read. The percentage of
+    an earlier wake, still on the row, must not stand in for this one either.
+    """
+    _seed_firmware(env)
+    env.set_device(battery_percent=OTA_MIN_BATTERY_PCT - 1)
+
+    body = env.display(FW_VERSION="0.1.0")
+    assert body["update_firmware"] is True
+
+
+def test_an_older_assigned_version_is_offered_too(env: Env) -> None:
+    """Condition 3 is "differs", not "newer": versions are never ordered, so
+    assigning an older image is how a downgrade is done. docs/deploy.md says so."""
+    _seed_firmware(env, version="0.1.0")
+    body = env.display(FW_VERSION="0.2.0", PERCENT_CHARGED="80")
+    assert body["update_firmware"] is True
+    assert body["firmware_version"] == "0.1.0"
+
+
 def test_an_offered_update_never_shares_its_wake_with_a_repaint(env: Env) -> None:
     """Flashing is 1.35 MB of radio; a cold panel refresh is 35 s of panel drive.
 
@@ -1410,6 +1436,24 @@ def test_preview_returns_a_png_of_panel_size(env: Env) -> None:
     assert response.headers["content-type"] == "image/png"
     image = Image.open(io.BytesIO(response.content))
     assert image.size == (settings.panel_width, settings.panel_height)
+
+
+def test_a_failed_preview_does_not_tell_the_caller_why(env: Env, monkeypatch, caplog) -> None:
+    """The exception text can carry a path, a DSN or a private calendar URL,
+    and /preview is open whenever ADMIN_API_KEY is unset. The reason belongs
+    in the server log (CodeQL py/stack-trace-exposure)."""
+
+    async def boom(*_args, **_kwargs):
+        raise RuntimeError("could not open /data/secret-place: host db.internal.example")
+
+    monkeypatch.setattr(main, "render_frame_async", boom)
+    with caplog.at_level("ERROR"):
+        response = env.client.get("/preview")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": 503, "message": "render failed, see the server log"}
+    assert "secret-place" not in response.text
+    assert "secret-place" in caplog.text
 
 
 def test_preview_raw_is_the_packed_wire_format(env: Env) -> None:

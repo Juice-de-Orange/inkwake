@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 import shutil
 import sqlite3
 import sys
@@ -29,8 +30,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+from . import firmware_image
 from .config import settings
-from .store import DbUnavailable, Store, new_row_id
+from .store import DbUnavailable, Store, new_row_id, normalize_mac
 
 
 def _now() -> datetime:
@@ -93,6 +95,22 @@ def _check_ranges(fields: dict[str, Any]) -> None:
                 raise ValueError(f"--{name.replace('_', '-')} must be between {lo:g} and {hi:g} ({why})")
 
 
+#: The canonical spelling the schema's CHECK accepts, after normalize_mac().
+_MAC_RE = re.compile(r"[0-9A-F]{2}(:[0-9A-F]{2}){5}")
+
+
+def _explain_refusal(exc: sqlite3.IntegrityError) -> str:
+    """A sentence for the two UNIQUEs an operator can run into. Anything else
+    keeps SQLite's own text: a constraint nobody anticipated is worth seeing."""
+    text = str(exc)
+    if "devices.mac" in text:
+        return "a device with this MAC address already exists (see: device list)"
+    if "firmware.version" in text:
+        return ("this firmware version is already registered (see: firmware list); "
+                "remove it first, or build the image with a new FW_VERSION")
+    return f"refused by the database: {text}"
+
+
 # -- commands -----------------------------------------------------------------
 
 
@@ -104,6 +122,8 @@ def cmd_migrate(_: argparse.Namespace) -> int:
 
 def cmd_device_add(args: argparse.Namespace) -> int:
     slots = parse_slots(args.slots) if args.slots else None
+    if args.mac and not _MAC_RE.fullmatch(normalize_mac(args.mac)):
+        raise ValueError(f"--mac {args.mac!r} is not a MAC address (six hex pairs, AA:BB:CC:DD:EE:FF)")
     kwargs: dict[str, Any] = {"mac": args.mac, "location": args.location}
     if slots:
         kwargs["slots"] = slots
@@ -178,20 +198,6 @@ def cmd_device_remove(args: argparse.Namespace) -> int:
     return 0
 
 
-_FW_MARKER = b"INKWAKE-FW-VERSION:"
-
-
-def _embedded_fw_version(image: bytes) -> str | None:
-    """FW_VERSION compiled into an inkwake image (see `kFwMarker` in firmware/src/main.cpp)."""
-    start = image.find(_FW_MARKER)
-    if start < 0:
-        return None
-    start += len(_FW_MARKER)
-    end = image.find(b"\x00", start)
-    raw = image[start:end if end >= 0 else start + 32]
-    return raw.decode("ascii", errors="replace") or None
-
-
 def cmd_firmware_add(args: argparse.Namespace) -> int:
     source = Path(args.path)
     if not source.is_file():
@@ -201,15 +207,23 @@ def cmd_firmware_add(args: argparse.Namespace) -> int:
     if not data:
         print("refusing an empty firmware image", file=sys.stderr)
         return 1
-    embedded = _embedded_fw_version(data)
-    if embedded is None:
-        print("warning: the image carries no INKWAKE-FW-VERSION marker; cannot check --version",
-              file=sys.stderr)
-    elif embedded != args.version:
+    # Everything registered here is offered to a board behind a wall mount, so
+    # the question "is this a firmware image at all" is asked before the copy.
+    # It used to be a warning for random bytes and silence for a truncated
+    # build, and both were then served as an update.
+    inspection = firmware_image.inspect(data)
+    for problem in inspection.problems:
+        print(f"{'warning' if args.force else 'refusing'}: {problem}", file=sys.stderr)
+    if inspection.problems and not args.force:
+        print("nothing was registered. --force registers the file as it is; the board "
+              "then has only its own checks.", file=sys.stderr)
+        return 1
+    if inspection.version is not None and inspection.version != args.version:
         # A device compares the offered version with its own FW_VERSION. Registering 1.0.1 as
         # 1.0.2 would make it flash, still report 1.0.1 and be offered the image again.
-        print(f"refusing: --version {args.version} but the image was built as FW_VERSION {embedded}",
-              file=sys.stderr)
+        # Not covered by --force: the remedy is to type the right number.
+        print(f"refusing: --version {args.version} but the image was built as FW_VERSION "
+              f"{inspection.version}", file=sys.stderr)
         return 1
     settings.firmware_dir.mkdir(parents=True, exist_ok=True)
     stored_name = f"{new_row_id()}.bin"
@@ -301,6 +315,8 @@ def build_parser() -> argparse.ArgumentParser:
     fadd = fw.add_parser("add", help="register a firmware .bin")
     fadd.add_argument("path")
     fadd.add_argument("--version", required=True, help="must equal FW_VERSION compiled into the image")
+    fadd.add_argument("--force", action="store_true",
+                      help="register the file even though it fails the image checks")
     fadd.set_defaults(func=cmd_firmware_add)
     fw.add_parser("list", help="list firmware images").set_defaults(func=cmd_firmware_list)
     frem = fw.add_parser("remove", help="delete a firmware image")
@@ -317,7 +333,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     except sqlite3.IntegrityError as exc:
-        print(f"refused by the database: {exc}", file=sys.stderr)
+        print(f"error: {_explain_refusal(exc)}", file=sys.stderr)
         return 2
     except DbUnavailable as exc:
         print(f"database unavailable: {exc}", file=sys.stderr)

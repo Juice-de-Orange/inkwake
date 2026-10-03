@@ -32,6 +32,7 @@ sequenceDiagram
 | `app/auth.py` | Device token parsing and constant-time verification (401 vs 403 vs 503) |
 | `app/store.py` | SQLite schema and statements: devices, device logs, firmware catalogue |
 | `app/cli.py` | Operator commands (`python -m app.cli`) |
+| `app/firmware_image.py` | The checks that make a file an inkwake firmware image; shared by `firmware add` and `firmware/tools/verify-image.py` |
 | `app/assemble.py` | Runs the sources concurrently under a time budget, caches results, turns failures into footer hints |
 | `app/schedule.py` | Wake slots, countdowns across DST, `should_repaint` |
 | `app/models.py` | The data contracts between sources and renderer |
