@@ -156,8 +156,9 @@ The devices, their settings and their tokens are back as they were at backup
 time; a device added after the backup is gone and needs `device add` again.
 The firmware *catalogue* is in the database but the image files are not: after
 restoring only `inkwake.sqlite3` onto a fresh volume, remove and re-add each
-image (`firmware remove`, `firmware add`) — until then the server offers an
-update it cannot deliver. Restoring the whole volume avoids that.
+image (`firmware remove`, `firmware add`) — until then the server does not offer
+those updates and logs `file … is missing from the firmware dir` on each wake.
+Restoring the whole volume avoids that.
 
 ## Updating
 

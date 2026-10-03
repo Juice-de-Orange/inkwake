@@ -1045,7 +1045,7 @@ def _firmware_offer(
     reported_version: Optional[str],
     battery_percent: Optional[int],
 ) -> Optional[FirmwareRecord]:
-    """The image to offer this wake, or None. Five conditions, all required.
+    """The image to offer this wake, or None. Six conditions, all required.
 
     1. An image is assigned to *this* device. There is deliberately no "newest
        for everyone": a staged rollout is the only kind this project does.
@@ -1068,6 +1068,10 @@ def _firmware_offer(
     Refusing here would make a board with a broken battery read impossible to
     update -- possibly with the very image that repairs the read -- while a
     board that does know its voltage still refuses a flat cell by itself.
+
+    6. The file is there. A registry restored without its firmware directory
+       still names the image; offering it would send the board to a download
+       that answers 404, on every wake, at the cost of a radio session each.
 
     "Differs", not "newer": versions are compared as strings and never
     ordered, so assigning an older image is a downgrade the board will take.
@@ -1106,6 +1110,14 @@ def _firmware_offer(
             device.id,
             battery_percent,
             device.ota_min_battery_pct,
+        )
+        return None
+    if _firmware_path(firmware.file_path) is None:
+        log.error(
+            "update %s not offered to %s: file %r is missing from the firmware dir",
+            firmware.version,
+            device.id,
+            firmware.file_path,
         )
         return None
     return firmware
