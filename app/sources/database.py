@@ -150,6 +150,13 @@ def _note(failures: Optional[list[str]], name: str) -> None:
 # --------------------------------------------------------------------------
 
 
+def _describe(exc: BaseException) -> str:
+    """One line for the log. A database that is down is asked on every render,
+    and a full psycopg traceback each time buries everything else; libpq also
+    answers in several lines. Type and message say what an operator can act on."""
+    return f"{type(exc).__name__}: {' '.join(str(exc).split())}"
+
+
 def fetch_bookings(
     dsn: str,
     limit: int,
@@ -178,10 +185,10 @@ def fetch_bookings(
                 )
                 rows = cur.fetchall()
             return [_to_booking(row) for row in rows]
-    except Exception:
+    except Exception as exc:
         # Includes the mapping step: a row we cannot read means the schema
         # moved under us, and half a booking list is worse than none.
-        log.warning("database: bookings unavailable", exc_info=True)
+        log.warning("database: bookings unavailable (%s)", _describe(exc))
         _note(failures, BOOKINGS_FAILURE)
         return []
 
@@ -239,8 +246,8 @@ def fetch_latest_sighting(
                 camera=str(row.get("camera") or "").strip(),
                 image_path=_resolve_image(row.get("image_path"), sightings_dir),
             )
-    except Exception:
-        log.warning("database: sighting unavailable", exc_info=True)
+    except Exception as exc:
+        log.warning("database: sighting unavailable (%s)", _describe(exc))
         _note(failures, SIGHTING_FAILURE)
         return None
 

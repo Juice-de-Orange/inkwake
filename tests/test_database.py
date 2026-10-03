@@ -308,6 +308,30 @@ def test_bookings_survive_an_unreachable_database(monkeypatch: pytest.MonkeyPatc
     assert failures == [database.BOOKINGS_FAILURE]
 
 
+def test_an_unreachable_database_costs_one_log_line_per_panel(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A database that is down is asked again on every render. With a full
+    traceback each time the log held nothing else; libpq's answer also spans
+    several lines."""
+    error = psycopg.OperationalError(
+        'connection failed: connection to server at "192.0.2.10", port 5432 failed:\n'
+        "\tIs the server running on that host and accepting TCP/IP connections?"
+    )
+    install_fake(monkeypatch, connect_error=error)
+
+    with caplog.at_level("WARNING", logger=database.log.name):
+        database.fetch_bookings(DSN, 3, date(2026, 8, 25))
+        database.fetch_latest_sighting(DSN, tmp_path)
+
+    assert len(caplog.records) == 2
+    for record in caplog.records:
+        assert record.exc_info is None
+        message = record.getMessage()
+        assert "\n" not in message
+        assert "OperationalError" in message and "192.0.2.10" in message
+
+
 def test_bookings_survive_a_failing_query(monkeypatch: pytest.MonkeyPatch) -> None:
     install_fake(monkeypatch, BOOKING_ROWS, query_error=psycopg.errors.UndefinedColumn("boom"))
     failures: list[str] = []

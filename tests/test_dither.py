@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import io
 import math
+import os
 import time
 
 import numpy as np
@@ -473,9 +474,71 @@ def test_real_night_frame_survives_the_full_panel_path(night_frame):
 # --------------------------------------------------------------------------
 # Budget
 # --------------------------------------------------------------------------
+#
+# The budget is "two seconds for a cold 400x300 photo on a small host", and the
+# honest way to hold a suite to that is not a stopwatch. As a bare
+# `assert cold < 2.0` this test failed three runs in sixteen on a busy machine
+# - also on CPU time, which a loaded host inflates as well (shared cores, cold
+# caches, a throttled clock): the code had not changed, the machine had.
+#
+# So the default assertions are about the code:
+#
+#   * the lookup table is built once and reused - counted, not timed;
+#   * the cost is compared with a fixed yardstick measured in the same process
+#     around the very same calls, so a slow or busy host stretches both sides.
+#
+# The yardstick is deliberately independent of app.render: a regression there
+# must not be able to slow down its own ruler. It mixes the two kinds of work
+# the dither pass does - a scalar Python loop like _scan_row, and vectorised
+# float64 like the table build.
+#
+# The absolute number is still available where the host is known and quiet:
+#   INKWAKE_DITHER_BUDGET_S=2 python -m pytest tests/test_dither.py -k budget
 
 
-def test_400x300_stays_under_two_seconds(night_frame, monkeypatch):
+def _yardstick_python() -> None:
+    values = [i / 20000 for i in range(20000)]
+    out = [0] * len(values)
+    sqrt = math.sqrt
+    carry = 0.0
+    for x in range(len(values)):
+        v = values[x] + carry * 0.4375
+        if v < 0.0:
+            v = 0.0
+        elif v > 1.0:
+            v = 1.0
+        k = int(sqrt(v) * 95 + 0.5)
+        out[x] = k
+        carry = v - k / 95
+
+
+def _yardstick_numpy() -> None:
+    a = (np.arange(65536 * 3, dtype=np.float64).reshape(-1, 3) % 997) / 997
+    b = np.cbrt(a**2.4 + 0.05)
+    ((b[:, None, :] - b[:6][None, :, :]) ** 2).sum(axis=-1).argmin(axis=1)
+
+
+def _cpu(fn, *args) -> float:
+    start = time.process_time()
+    fn(*args)
+    return time.process_time() - start
+
+
+def _yardstick() -> float:
+    return _cpu(_yardstick_python) + _cpu(_yardstick_numpy)
+
+
+#: In yardsticks. Measured on the reference host, idle and with sixteen busy
+#: loops beside it: cold 21-31, warm 7-11. The limits are about twice that, so
+#: what trips them is a change that doubles the cost - a rebuilt table (warm
+#: becomes cold, ~25), a finer table (x8 per doubling), exact Lab matching in
+#: the scan loop (x10 and more). A 30 % slowdown passes; no timing check that
+#: survives a shared CI runner can see one.
+_COLD_LIMIT = 60.0
+_WARM_LIMIT = 20.0
+
+
+def test_400x300_stays_inside_its_budget(night_frame, monkeypatch):
     """Includes building the lookup table, which is what a cold worker pays."""
     # monkeypatch rather than a bare assignment: the table is a process-wide
     # cache, and an empty one left behind by a test that died here would make
@@ -484,14 +547,37 @@ def test_400x300_stays_under_two_seconds(night_frame, monkeypatch):
     # two-ink table - the same cost as the six-ink one.
     monkeypatch.setattr(dither, "_LUT_CACHE", {})
 
-    start = time.process_time()
-    dither.dither_photo(night_frame, (400, 300), "floyd")
-    cold = time.process_time() - start
+    builds = []
+    build = dither._build_ink_lut
 
-    start = time.process_time()
-    dither.dither_photo(night_frame, (400, 300), "atkinson")
-    warm = time.process_time() - start
+    def counting_build(inks=None):
+        builds.append(inks)
+        return build(inks)
 
-    print(f"\n400x300: cold (with LUT build) {cold:.3f} s, warm atkinson {warm:.3f} s")
-    assert cold < 2.0
-    assert warm < 2.0
+    monkeypatch.setattr(dither, "_build_ink_lut", counting_build)
+
+    # The yardstick is taken before, between and after, and the median is
+    # used: load comes and goes within a second, and a ruler measured in one
+    # quiet moment would make the calls beside it look slow.
+    units = [_yardstick() for _ in range(3)]
+    cold = _cpu(dither.dither_photo, night_frame, (400, 300), "floyd")
+    units += [_yardstick() for _ in range(3)]
+    warm = _cpu(dither.dither_photo, night_frame, (400, 300), "atkinson")
+    units += [_yardstick() for _ in range(3)]
+    unit = sorted(units)[len(units) // 2]
+
+    print(
+        f"\n400x300: cold (with LUT build) {cold:.3f} s = {cold / unit:.1f} units, "
+        f"warm atkinson {warm:.3f} s = {warm / unit:.1f} units, unit {unit * 1000:.1f} ms"
+    )
+
+    # One table for two photos. Without the cache every photo pays the build.
+    assert builds == [dither._NEUTRAL_INKS]
+
+    assert cold / unit < _COLD_LIMIT
+    assert warm / unit < _WARM_LIMIT
+
+    budget = os.environ.get("INKWAKE_DITHER_BUDGET_S")
+    if budget:
+        assert cold < float(budget)
+        assert warm < float(budget)

@@ -1058,7 +1058,19 @@ def _firmware_offer(
     4. The image is for this device class, checked here and again where the
        bytes go out.
     5. The cell can afford it: an update is 1.35 MB over WiFi at ~120 mA plus
-       a flash write, on a battery-powered board.
+       a flash write, on a battery-powered board. A charge reported in this
+       request below `ota_min_battery_pct` holds the offer back.
+
+    A wake that reports NO charge is not held back, and that is on purpose.
+    The firmware omits both battery headers exactly when every PMIC read
+    failed (power.cpp returns 0, net.cpp then sends nothing), and it applies
+    the same rule to its own gate: unknown is not empty (main.cpp, `charged`).
+    Refusing here would make a board with a broken battery read impossible to
+    update -- possibly with the very image that repairs the read -- while a
+    board that does know its voltage still refuses a flat cell by itself.
+
+    "Differs", not "newer": versions are compared as strings and never
+    ordered, so assigning an older image is a downgrade the board will take.
     """
     if device is None or not device.firmware_id:
         return None
@@ -1438,9 +1450,14 @@ async def preview(request: Request) -> Response:
     try:
         frame = await render_frame_async(telemetry, _now())
     except Exception as exc:  # noqa: BLE001
-        # The browser is the one caller that wants the error, not a fallback.
+        # The browser is the one caller that wants an error, not a fallback.
+        # The reason goes to the log, not into the response: an exception
+        # text can carry a path, a DSN or a calendar URL, and this endpoint is
+        # open whenever ADMIN_API_KEY is unset.
         log.exception("preview render failed: %s", exc)
-        return JSONResponse({"status": 503, "message": f"render failed: {exc}"}, status_code=503)
+        return JSONResponse(
+            {"status": 503, "message": "render failed, see the server log"}, status_code=503
+        )
 
     if request.query_params.get("raw"):
         return Response(
