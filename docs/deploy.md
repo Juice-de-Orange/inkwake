@@ -84,7 +84,9 @@ from the panel's datasheet and cannot be lowered.
 python firmware/tools/verify-image.py firmware/.pio/build/papercolor/firmware.bin
 # /tmp in the container is a tmpfs, which `docker cp` cannot write to -- pipe it in:
 docker compose exec -T inkwake sh -c 'cat > /tmp/firmware.bin' < firmware/.pio/build/papercolor/firmware.bin
-docker compose exec inkwake python -m app.cli firmware add /tmp/firmware.bin --version 1.0.2
+# --version must be the FW_VERSION compiled into the image (firmware/src/config.h); the CLI
+# reads the marker in the image and refuses a mismatch.
+docker compose exec inkwake python -m app.cli firmware add /tmp/firmware.bin --version 1.0.1
 docker compose exec inkwake python -m app.cli device set <device-id> --firmware <firmware-id>
 ```
 

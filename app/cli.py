@@ -178,6 +178,20 @@ def cmd_device_remove(args: argparse.Namespace) -> int:
     return 0
 
 
+_FW_MARKER = b"INKWAKE-FW-VERSION:"
+
+
+def _embedded_fw_version(image: bytes) -> str | None:
+    """FW_VERSION compiled into an inkwake image (see `kFwMarker` in firmware/src/main.cpp)."""
+    start = image.find(_FW_MARKER)
+    if start < 0:
+        return None
+    start += len(_FW_MARKER)
+    end = image.find(b"\x00", start)
+    raw = image[start:end if end >= 0 else start + 32]
+    return raw.decode("ascii", errors="replace") or None
+
+
 def cmd_firmware_add(args: argparse.Namespace) -> int:
     source = Path(args.path)
     if not source.is_file():
@@ -186,6 +200,16 @@ def cmd_firmware_add(args: argparse.Namespace) -> int:
     data = source.read_bytes()
     if not data:
         print("refusing an empty firmware image", file=sys.stderr)
+        return 1
+    embedded = _embedded_fw_version(data)
+    if embedded is None:
+        print("warning: the image carries no INKWAKE-FW-VERSION marker; cannot check --version",
+              file=sys.stderr)
+    elif embedded != args.version:
+        # A device compares the offered version with its own FW_VERSION. Registering 1.0.1 as
+        # 1.0.2 would make it flash, still report 1.0.1 and be offered the image again.
+        print(f"refusing: --version {args.version} but the image was built as FW_VERSION {embedded}",
+              file=sys.stderr)
         return 1
     settings.firmware_dir.mkdir(parents=True, exist_ok=True)
     stored_name = f"{new_row_id()}.bin"

@@ -98,7 +98,8 @@ You need Docker with Compose on a machine the board can reach.
 ```bash
 git clone https://github.com/Juice-de-Orange/inkwake.git
 cd inkwake
-cp .env.example .env            # set PUBLIC_BASE_URL at least
+cp .env.example .env            # set PUBLIC_BASE_URL: the address the BOARD reaches the server at,
+                                # e.g. http://192.168.1.20:8099 on a LAN without a domain
 docker compose up -d --build
 docker compose exec inkwake python -m app.cli device add --label "Hallway"
 ```
@@ -119,7 +120,7 @@ proxy and backups: [docs/deploy.md](docs/deploy.md).
 docker compose exec inkwake python -m app.cli device list
 docker compose exec inkwake python -m app.cli device set <id> --slots 06:50,14:50,19:50
 docker compose exec inkwake python -m app.cli device set <id> --min-refresh-temp-c 12
-docker compose exec inkwake python -m app.cli firmware add /path/firmware.bin --version 1.0.2
+docker compose exec inkwake python -m app.cli firmware add /path/firmware.bin --version 1.0.1
 docker compose exec inkwake python -m app.cli device set <id> --firmware <firmware-id>
 ```
 
