@@ -10,8 +10,8 @@ pytest-randomly==4.1.0
 # test_server.py drives the ASGI app through httpx's ASGITransport rather than
 # a live server; anyio is what actually runs the lifespan.
 pytest-asyncio==1.4.0
-anyio==4.14.2
+anyio==4.15.1
 # test_deploy.py parses the compose files. It uses importorskip, so a missing
 # PyYAML turns a dozen deployment invariants into silent skips.
 PyYAML==6.0.3
-ruff==0.8.4
+ruff==0.16.9
