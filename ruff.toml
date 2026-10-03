@@ -1,0 +1,4 @@
+[lint]
+# Pin the rule selection to ruff's long-standing default (pycodestyle errors + Pyflakes).
+# ruff 0.16 widened its defaults; enabling more rule families is a deliberate change of its own.
+select = ["E4", "E7", "E9", "F"]
