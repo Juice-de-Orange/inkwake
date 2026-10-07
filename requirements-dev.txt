@@ -14,4 +14,4 @@ anyio==4.15.1
 # test_deploy.py parses the compose files. It uses importorskip, so a missing
 # PyYAML turns a dozen deployment invariants into silent skips.
 PyYAML==6.0.3
-ruff==0.16.9
+ruff==0.16.10
