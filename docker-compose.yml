@@ -43,6 +43,7 @@ services:
       # frame, and a frame can carry names from the bookings view.
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
       PANEL_LANGUAGE: ${PANEL_LANGUAGE:-en}
+      # An example location (Vienna city centre), like TZ_NAME above. Set yours.
       WEATHER_LAT: ${WEATHER_LAT:-48.2082}
       WEATHER_LON: ${WEATHER_LON:-16.3738}
       EVENTS_ICS_URLS: ${EVENTS_ICS_URLS:-}

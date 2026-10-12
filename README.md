@@ -102,7 +102,9 @@ git clone https://github.com/Juice-de-Orange/inkwake.git
 cd inkwake
 cp .env.example .env            # set PUBLIC_BASE_URL: the address the BOARD reaches the server at,
                                 # e.g. http://192.168.1.20:8099 on a LAN without a domain --
-                                # and then INKWAKE_BIND=0.0.0.0 as well (see below)
+                                # and then INKWAKE_BIND=0.0.0.0 as well (see below);
+                                # WEATHER_LAT/WEATHER_LON/TZ_NAME: your location (the
+                                # example values are Vienna); PANEL_LANGUAGE: en or de
 docker compose up -d --build
 docker compose exec inkwake python -m app.cli device add --label "Hallway"
 ```

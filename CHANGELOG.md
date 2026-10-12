@@ -26,6 +26,8 @@ All notable changes to this project are documented here. The format follows
   means the heading of the panel language. A `.env` copied from 0.1.0's
   `.env.example` still sets the German headings explicitly; empty them for
   English headings.
+- `.env.example`, the compose file and the deploy guide say plainly that the
+  default location (Vienna city centre) and time zone are an example to replace.
 - First public release. Server: TRMNL BYOS endpoints for the M5Stack PaperColor,
   six-ink colour pipeline, server-side panel care, SQLite device registry with a
   CLI, weather and sun times, iCalendar events, optional bookings and sightings

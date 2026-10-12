@@ -17,6 +17,11 @@ load a picture while the server believes it painted one.
 Set `ADMIN_API_KEY` as well (`python3 -c "import secrets; print(secrets.token_urlsafe(32))"`).
 It guards `/preview` and `/api/internal/status`, which render or describe a frame.
 
+Then say where the board hangs: `TZ_NAME`, `WEATHER_LAT` and `WEATHER_LON`
+(decimal degrees). The values in `.env.example` are an example — Vienna city
+centre — and the weather and sun times on the panel are for that place until you
+change them. `PANEL_LANGUAGE` picks the panel text, `en` (default) or `de`.
+
 Everything else is explained in `.env.example`; the data sources are described in
 [data-sources.md](data-sources.md).
 

@@ -179,8 +179,9 @@ class Settings:
     events_title: str = field(default_factory=lambda: _env("EVENTS_TITLE", ""))
     sighting_title: str = field(default_factory=lambda: _env("SIGHTING_TITLE", ""))
 
-    #: Location for weather and sun times. The default is only an example
-    #: (Vienna); set your own.
+    #: Location for weather and sun times, decimal degrees. The default is a
+    #: neutral example (Vienna city centre), like TZ_NAME's; .env.example says
+    #: to set your own.
     weather_lat: float = field(default_factory=lambda: _env_float("WEATHER_LAT", 48.2082))
     weather_lon: float = field(default_factory=lambda: _env_float("WEATHER_LON", 16.3738))
 
