@@ -73,6 +73,22 @@ setup portal together with Wi-Fi and `PUBLIC_BASE_URL` (see
 [firmware/README.md](../firmware/README.md)). A lost token cannot be recovered:
 `device remove`, then `device add` again.
 
+**Moving an existing board to this server.** A board that already holds a
+token from another inkwake server (or from the system inkwake was derived from)
+does not need to be re-provisioned. The row needs the board's device id — the
+part of its token in front of the dot — and the SHA-256 hex of its full token,
+which is what the old database stores. The clear token is never needed and is
+refused:
+
+```bash
+# hash.txt holds one line: the 64 hex characters from the old registry.
+docker compose exec -T inkwake python -m app.cli device import \
+  --id <device-id> --label "Hallway" --slots 06:50,14:50,19:50 --token-hash - < hash.txt
+```
+
+Panel-care and battery thresholds start at the defaults; copy the old values
+with `device set`. Telemetry and the log fill in from the next wake.
+
 Per-device settings (wake times, panel-care and battery thresholds) are changed
 with `device set`; `python -m app.cli device set --help` lists them. The ranges
 are the same the database enforces — the 180 s minimum between refreshes comes

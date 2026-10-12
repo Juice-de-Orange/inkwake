@@ -8,6 +8,7 @@ SQLite file in tmp_path; nothing else is touched.
 from __future__ import annotations
 
 import hashlib
+import io
 import re
 import struct
 from dataclasses import replace
@@ -16,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from app import cli
+from app.auth import Reason, authenticate
 from app.config import settings
 from app.store import Store, hash_device_token
 
@@ -365,3 +367,82 @@ def test_a_device_can_point_only_at_existing_firmware(capsys) -> None:
     code, _, err = _run(capsys, "device", "set", device_id, "--firmware", "f" * 20)
     assert code == 1
     assert "no firmware" in err
+
+
+# -- device import: an existing board, by its token hash ---------------------
+
+#: Stands in for the token a board already holds in NVS. Made up, like every
+#: token in this file; only its hash ever reaches the CLI.
+LIVE_TOKEN = "0123456789abcdef0123." + "s" * 32
+
+
+def test_device_import_lets_the_existing_token_in(capsys, tmp_path, monkeypatch) -> None:
+    digest = hash_device_token(LIVE_TOKEN)
+    monkeypatch.setattr("sys.stdin", io.StringIO(digest + "\n"))
+
+    code, out, err = _run(
+        capsys, "device", "import", "--id", "0123456789abcdef0123", "--label", "Hallway",
+        "--token-hash", "-", "--slots", "06:50,19:50",
+    )
+
+    assert code == 0, err
+    # Neither the token nor its hash is printed: there is nothing to hand over.
+    assert digest not in out + err and LIVE_TOKEN not in out + err
+    store = _store(tmp_path)
+    result = authenticate(store, LIVE_TOKEN)
+    assert result.ok and result.device is not None
+    assert result.device.label == "Hallway"
+    assert result.device.slots == (410, 1190)
+    assert authenticate(store, "0123456789abcdef0123." + "t" * 32).reason is Reason.UNKNOWN
+
+
+def test_device_import_takes_the_hash_as_an_argument_too(capsys, tmp_path) -> None:
+    digest = hash_device_token(LIVE_TOKEN).upper()  # pasted from a tool that prints uppercase
+    code, _, err = _run(capsys, "device", "import", "--id", "0123456789abcdef0123",
+                        "--label", "Hallway", "--token-hash", digest)
+    assert code == 0, err
+    assert authenticate(_store(tmp_path), LIVE_TOKEN).ok
+
+
+def test_device_import_refuses_a_clear_token_without_echoing_it(capsys, tmp_path) -> None:
+    code, out, err = _run(capsys, "device", "import", "--id", "0123456789abcdef0123",
+                          "--label", "Hallway", "--token-hash", LIVE_TOKEN)
+
+    assert code == 2
+    assert "never the token itself" in err
+    assert LIVE_TOKEN not in out + err and "s" * 32 not in out + err
+    store = _store(tmp_path)
+    store.migrate()
+    assert store.list_devices() == []
+
+
+@pytest.mark.parametrize(
+    "args, message",
+    [
+        (["--id", "0123456789abcdef0123", "--token-hash", "ab" * 31], "64 hex characters"),
+        (["--id", "0123456789abcdef0123", "--token-hash", "zz" * 32], "64 hex characters"),
+        (["--id", "not-hex", "--token-hash", "ab" * 32], "--id must be hex"),
+        (["--id", "a" * 65, "--token-hash", "ab" * 32], "--id must be hex"),
+    ],
+    ids=["short-hash", "not-hex-hash", "id-not-hex", "id-too-long"],
+)
+def test_device_import_explains_a_refusal(capsys, tmp_path, args, message) -> None:
+    code, out, err = _run(capsys, "device", "import", "--label", "Hallway", *args)
+    assert code == 2
+    assert message in err
+    assert "zz" * 32 not in out + err
+
+
+def test_device_import_refuses_a_second_row_for_the_same_id_or_hash(capsys, tmp_path) -> None:
+    digest = hash_device_token(LIVE_TOKEN)
+    base = ["device", "import", "--label", "Hallway"]
+    assert _run(capsys, *base, "--id", "0123456789abcdef0123", "--token-hash", digest)[0] == 0
+
+    code, _, err = _run(capsys, *base, "--id", "0123456789abcdef0123", "--token-hash", "cd" * 32)
+    assert code == 2 and "id already exists" in err and "constraint" not in err
+
+    code, out, err = _run(capsys, *base, "--id", "fedcba9876543210fedc", "--token-hash", digest)
+    assert code == 2 and "token hash" in err and "constraint" not in err
+    assert digest not in out + err
+    assert len(_store(tmp_path).list_devices()) == 1
+

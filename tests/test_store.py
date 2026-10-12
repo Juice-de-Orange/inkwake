@@ -699,3 +699,29 @@ def test_timestamps_come_back_aware_and_in_utc(sqlite_store: Store) -> None:
     assert painted is not None and painted.last_painted_at is not None
     assert painted.last_painted_at == vienna_noon
     assert painted.last_painted_at.utcoffset() == timedelta(0)
+
+
+def test_import_device_keeps_the_given_id_and_hash(sqlite_store: Store, tmp_path: Path) -> None:
+    digest = hash_device_token("0123456789abcdef0123.secret")
+
+    device = sqlite_store.import_device("0123456789abcdef0123", " Hallway ", digest.upper(), NOW,
+                                        slots=(1190, 410))
+
+    assert device.id == "0123456789abcdef0123"
+    assert device.label == "Hallway"
+    # Stored the way hash_device_token() writes it, or the comparison at
+    # every wake would fail on letter case alone.
+    assert device.token_hash == digest
+    assert device.slots == (410, 1190)
+    assert sqlite_store.get_device(device.id) == device
+
+
+@pytest.mark.parametrize("bad", ["", "ab" * 31, "zz" * 32, "0123456789abcdef0123.secret"],
+                         ids=["empty", "short", "not-hex", "clear-token"])
+def test_import_device_refuses_anything_but_a_sha256_hex(sqlite_store: Store, bad: str) -> None:
+    with pytest.raises(ValueError, match="64 hex characters") as info:
+        sqlite_store.import_device("0123456789abcdef0123", "Hallway", bad, NOW)
+    # Never repeated back: the caller may have pasted the clear token.
+    assert not bad or bad not in str(info.value)
+    assert sqlite_store.list_devices() == []
+

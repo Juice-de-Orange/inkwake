@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `device import` registers a board that already holds a token, from the
+  token's SHA-256 hash (`--token-hash`, or `-` to read it from stdin). For
+  moving a running installation without re-provisioning the boards. A clear
+  token is refused and never echoed.
 - First public release. Server: TRMNL BYOS endpoints for the M5Stack PaperColor,
   six-ink colour pipeline, server-side panel care, SQLite device registry with a
   CLI, weather and sun times, iCalendar events, optional bookings and sightings
