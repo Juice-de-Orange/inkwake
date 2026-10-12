@@ -19,6 +19,7 @@ import pytest
 from app import cli
 from app.auth import Reason, authenticate
 from app.config import settings
+from app.models import Telemetry
 from app.store import Store, hash_device_token
 
 TOKEN_RE = re.compile(r"^\s{4}([0-9a-f]{20}\.[A-Za-z0-9_-]{30,})$", re.MULTILINE)
@@ -446,3 +447,39 @@ def test_device_import_refuses_a_second_row_for_the_same_id_or_hash(capsys, tmp_
     assert digest not in out + err
     assert len(_store(tmp_path).list_devices()) == 1
 
+
+# -- device rotate-token -----------------------------------------------------
+
+
+def test_rotate_token_replaces_the_token_and_keeps_the_device(capsys, tmp_path) -> None:
+    device_id, old = _add(capsys, "--slots", "07:00,19:30")
+    store = _store(tmp_path)
+    store.update_device(device_id, cli._now(), min_refresh_temp_c=12.0)
+    store.record_telemetry(device_id, Telemetry(device_id="", battery_percent=77), cli._now())
+    store.add_log(device_id, {"message": "hello"}, cli._now())
+    before = store.get_device(device_id)
+    assert authenticate(store, old).ok
+
+    code, out, err = _run(capsys, "device", "rotate-token", device_id)
+
+    assert code == 0, err
+    match = TOKEN_RE.search(out)
+    assert match, out
+    new = match.group(1)
+    assert new != old and new.split(".", 1)[0] == device_id
+    # Immediately: the next request with the old token is refused.
+    assert authenticate(store, old).reason is Reason.UNKNOWN
+    result = authenticate(store, new)
+    assert result.ok
+    after = result.device
+    assert after is not None and before is not None
+    # Everything but the hash is what it was: settings, telemetry, the log.
+    assert replace(after, token_hash=before.token_hash) == before
+    assert store.count_logs() == 1
+
+
+def test_rotate_token_on_an_unknown_device_is_reported(capsys) -> None:
+    _run(capsys, "migrate")
+    code, out, err = _run(capsys, "device", "rotate-token", "0" * 20)
+    assert code == 1
+    assert "no device" in err and "token" not in out

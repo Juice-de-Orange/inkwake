@@ -5,6 +5,7 @@
     python -m app.cli device list
     python -m app.cli device set <id> --slots 06:50,19:50 --min-refresh-temp-c 12
     python -m app.cli device remove <id>
+    python -m app.cli device rotate-token <id>
     python -m app.cli device import --id <id> --label "Hallway" --token-hash - < hash.txt
     python -m app.cli firmware add firmware.bin --version 1.1.0
     python -m app.cli firmware list
@@ -12,7 +13,7 @@
 
 This is the only way a device comes into existence. `device add` prints the
 token exactly once; the database keeps only its SHA-256, so a lost token means
-`device remove` + `device add`, not recovery. `device import`
+`device rotate-token` (same device, new token), not recovery. `device import`
 registers a board that already holds a token, from the token's hash -- for
 moving an installation without re-provisioning. Inside the container:
 `docker compose exec app python -m app.cli …`.
@@ -181,6 +182,17 @@ def cmd_device_import(args: argparse.Namespace) -> int:
     print(f"wake times:      {_fmt_slots(device.slots)}")
     print("The board keeps the token it already has. Panel-care and battery settings "
           "are the defaults; change them with: device set")
+    return 0
+
+
+def cmd_device_rotate_token(args: argparse.Namespace) -> int:
+    token = _store().rotate_token(args.id, _now())
+    if token is None:
+        print(f"no device {args.id}", file=sys.stderr)
+        return 1
+    print(f"new token for {args.id}; the old one stopped working just now.")
+    print()
+    _print_token(token)
     return 0
 
 
@@ -361,6 +373,10 @@ def build_parser() -> argparse.ArgumentParser:
     imp.add_argument("--location")
     imp.add_argument("--slots", help="wake times, e.g. 06:50,14:50,19:50")
     imp.set_defaults(func=cmd_device_import)
+
+    rot = device.add_parser("rotate-token", help="give a device a new token; the old one stops working")
+    rot.add_argument("id")
+    rot.set_defaults(func=cmd_device_rotate_token)
 
     rem = device.add_parser("remove", help="delete a device (its token stops working)")
     rem.add_argument("id")

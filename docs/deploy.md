@@ -70,8 +70,16 @@ docker compose exec inkwake python -m app.cli device add --label "Hallway" --mac
 
 The token is printed once and only its hash is stored. Enter it in the board's
 setup portal together with Wi-Fi and `PUBLIC_BASE_URL` (see
-[firmware/README.md](../firmware/README.md)). A lost token cannot be recovered:
-`device remove`, then `device add` again.
+[firmware/README.md](../firmware/README.md)). A lost token cannot be recovered,
+but it can be replaced:
+
+```bash
+docker compose exec inkwake python -m app.cli device rotate-token <device-id>
+```
+
+prints a new token once and the old one stops working at once. The device keeps
+its id, settings, log and firmware assignment; enter the new token in the board's
+setup portal.
 
 **Moving an existing board to this server.** A board that already holds a
 token from another inkwake server (or from the system inkwake was derived from)

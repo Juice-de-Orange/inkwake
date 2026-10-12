@@ -174,7 +174,7 @@ There is currently **no button** for this (the three buttons are unused, see
 [Known gaps](#known-gaps)). The only way is `pio run -t erase` followed by a
 fresh `-t upload`. That also erases the device token and the server URL, so
 the setup portal asks for them again (`device list` shows the id; a lost token
-means `device remove` and `device add`). The ETag is simply fetched anew.
+means `device rotate-token <id>`, which prints a new one). The ETag is simply fetched anew.
 
 ### What happens at power-on
 

@@ -197,6 +197,10 @@ one SQLite file in the data volume. Devices exist only through the CLI:
   `<id>.<secret>` **once**; the database stores only the SHA-256 of the full token.
   There is no enrolment endpoint, and no service statement (`SQL_*`) inserts into
   `devices` — a test holds that line.
+- `device rotate-token` replaces the hash of an existing row (own statement
+  `ADMIN_SQL_ROTATE_TOKEN`; `token_hash` stays out of `ADMIN_SETTABLE`).
+  `device import` creates a row from an id and a hash the board's token already
+  matches — for migrations. Neither ever accepts or prints a hash it was given.
 - The service writes telemetry and state, never identity or settings. Wake times,
   panel-care thresholds, `active`, the token hash and the firmware assignment are
   operator columns (`ADMIN_SQL_*`, `ADMIN_SETTABLE`).

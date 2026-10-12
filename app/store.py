@@ -424,6 +424,14 @@ ADMIN_SQL_INSERT_DEVICE = """
 
 ADMIN_SQL_DELETE_DEVICE = "DELETE FROM devices WHERE id = :id"
 
+#: Replaces the token and nothing else. Its own statement rather than a column
+#: in ADMIN_SETTABLE: `device set` takes typed values, and a token hash typed in
+#: by hand is a board locked out by a typo. Only `rotate_token()` writes it, with
+#: a hash it computed itself.
+ADMIN_SQL_ROTATE_TOKEN = """
+    UPDATE devices SET token_hash = :token_hash, updated_at = :now WHERE id = :id
+"""
+
 #: Columns the operator may change with `device set`. Anything not in here --
 #: telemetry, state, the token -- is not settable, by construction.
 ADMIN_SETTABLE: tuple[str, ...] = (
@@ -835,6 +843,26 @@ class Store:
             )
             row = conn.execute(SQL_GET_DEVICE, {"id": device_id}).fetchone()
         return self._row_to_device(row)
+
+    def rotate_token(self, device_id: str, now: datetime) -> Optional[str]:
+        """Give an existing device a new token and return it, or None if there
+        is no such device.
+
+        The old token stops working with this write: authentication reads the
+        row on every request and caches nothing. Settings, telemetry, logs and
+        the firmware assignment stay -- that is what distinguishes this from
+        `remove` + `add`, which also changes the id.
+        """
+        key = (device_id or "").strip()
+        if not key:
+            return None
+        token = new_device_token(key)
+        with self._connect() as conn:
+            cur = conn.execute(
+                ADMIN_SQL_ROTATE_TOKEN,
+                {"id": key, "token_hash": hash_device_token(token), "now": _ts(now)},
+            )
+        return token if cur.rowcount > 0 else None
 
     def update_device(self, device_id: str, now: datetime, **fields: Any) -> Optional[DeviceRecord]:
         """Change operator-owned settings. Unknown or service-owned fields are refused."""

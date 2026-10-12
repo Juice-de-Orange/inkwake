@@ -11,6 +11,9 @@ All notable changes to this project are documented here. The format follows
   token's SHA-256 hash (`--token-hash`, or `-` to read it from stdin). For
   moving a running installation without re-provisioning the boards. A clear
   token is refused and never echoed.
+- `device rotate-token <id>` gives a device a new token, printed once; the old
+  token stops working immediately. Settings, telemetry, logs and the firmware
+  assignment stay (#2).
 - First public release. Server: TRMNL BYOS endpoints for the M5Stack PaperColor,
   six-ink colour pipeline, server-side panel care, SQLite device registry with a
   CLI, weather and sun times, iCalendar events, optional bookings and sightings
