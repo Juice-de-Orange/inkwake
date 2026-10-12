@@ -20,7 +20,7 @@ Set `EVENTS_ICS_URLS` in `.env` to one or more calendar URLs, separated by comma
 EVENTS_ICS_URLS=https://calendar.example.org/club.ics,https://cloud.example.com/remote.php/dav/public-calendars/abc123?export
 EVENTS_COUNT=6          # rows on the panel
 EVENTS_DAYS_AHEAD=7     # how far ahead to look
-EVENTS_TITLE=Termine    # the section heading
+EVENTS_TITLE=Club      # the section heading; empty: "Events" / "Termine" (PANEL_LANGUAGE)
 ```
 
 Anything that serves `text/calendar` works: a public club or venue calendar, the
@@ -118,8 +118,8 @@ GRANT SELECT ON inkwake_bookings, inkwake_sightings TO inkwake_reader;
 
 ```dotenv
 SOURCES_DSN=postgresql://inkwake_reader:change-me@db.example.com:5432/app?sslmode=require
-BOOKINGS_TITLE=Buchungen
-SIGHTING_TITLE=Sichtung
+BOOKINGS_TITLE=Guests             # empty: the panel language's heading
+SIGHTING_TITLE=Wildlife camera
 SIGHTINGS_HOST_DIR=/srv/camera/pictures
 ```
 

@@ -3,10 +3,6 @@
 No API key, no account, no rate-limit header to respect at three requests a
 day. The location comes from WEATHER_LAT / WEATHER_LON.
 
-The German WMO code table keeps its umlauts: an LED matrix without an "ö"
-glyph might have to write "Bewoelkt", this panel renders real type and a
-reader would notice.
-
 Nothing in here raises. A frame with four of five sources is the right answer;
 a frame that never renders because Open-Meteo returned a 502 is not. Every
 failure path lands on None, and the caller records the source name in
@@ -23,6 +19,7 @@ import httpx
 
 from app.config import settings
 from app.models import Weather
+from app.panel_text import texts_for
 
 log = logging.getLogger(__name__)
 
@@ -35,49 +32,21 @@ DAILY_VARIABLES = "temperature_2m_min,temperature_2m_max"
 #: rendered at 23:40 has to reach into tomorrow to find any hour at all.
 FORECAST_DAYS = 2
 
-#: WMO 4677 weather codes in German. Short enough for a narrow column: this panel is 400 px wide and a
-#: description longer than ~18 characters gets ellipsised by the layout.
-#: The table is complete for the codes Open-Meteo emits.
-WEATHER_CODES: dict[int, str] = {
-    0: "Klar",
-    1: "Meist klar",
-    2: "Teilw. bewölkt",
-    3: "Bewölkt",
-    45: "Nebel",
-    48: "Nebel",
-    51: "Leichter Niesel",
-    53: "Niesel",
-    55: "Starker Niesel",
-    56: "Eisniesel",
-    57: "Eisniesel",
-    61: "Leichter Regen",
-    63: "Regen",
-    65: "Starkregen",
-    66: "Eisregen",
-    67: "Eisregen",
-    71: "Leichter Schnee",
-    73: "Schnee",
-    75: "Starker Schnee",
-    77: "Schneekorn",
-    80: "Regenschauer",
-    81: "Schauer",
-    82: "Starke Schauer",
-    85: "Schneeschauer",
-    86: "Starke Schneeschauer",
-    95: "Gewitter",
-    96: "Gewitter+Hagel",
-    99: "Gewitter+Hagel",
-}
+#: The wording of a WMO 4677 code lives with the rest of the panel text
+#: (app/panel_text.py), in the language of PANEL_LANGUAGE. These two names stay
+#: for callers that want the configured language's table.
+WEATHER_CODES: dict[int, str] = texts_for(settings.panel_language).weather
 
 #: Shown when Open-Meteo invents a code we have no wording for. Better than an
 #: empty string, which the layout would render as a blank line that looks like
 #: a bug rather than like missing data.
-UNKNOWN_DESCRIPTION = "Unbekannt"
+UNKNOWN_DESCRIPTION = texts_for(settings.panel_language).weather_unknown_code
 
 
-def describe(code: int) -> str:
-    """German wording for a WMO weather code."""
-    return WEATHER_CODES.get(code, UNKNOWN_DESCRIPTION)
+def describe(code: int, language: Optional[str] = None) -> str:
+    """Wording for a WMO weather code, in the panel language."""
+    texts = texts_for(language or settings.panel_language)
+    return texts.weather.get(code, texts.weather_unknown_code)
 
 
 # --------------------------------------------------------------------------

@@ -57,3 +57,21 @@ def test_a_malformed_number_names_the_variable(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("EVENTS_COUNT", "six")
     with pytest.raises(ValueError, match="EVENTS_COUNT"):
         Settings()
+
+
+def test_the_panel_language_defaults_to_english(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PANEL_LANGUAGE", raising=False)
+    assert Settings().panel_language == "en"
+    monkeypatch.setenv("PANEL_LANGUAGE", "")
+    assert Settings().panel_language == "en"
+
+
+def test_the_panel_language_is_read_case_insensitively(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PANEL_LANGUAGE", " DE ")
+    assert Settings().panel_language == "de"
+
+
+def test_an_unknown_panel_language_names_the_choices(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PANEL_LANGUAGE", "fr")
+    with pytest.raises(ValueError, match="PANEL_LANGUAGE must be one of en, de"):
+        Settings()

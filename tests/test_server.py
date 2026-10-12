@@ -30,7 +30,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.datastructures import Headers
 
-from app import assemble, main
+from app import assemble, main, panel_text
 from app.config import settings
 from app.models import Booking, Dashboard, Event, Sighting, SunTimes, Telemetry, Weather
 from app.schedule import next_slot
@@ -2123,11 +2123,6 @@ def test_missing_sensor_readings_are_reported(clean_cache: None) -> None:
 
 def test_failure_names_are_the_names_the_renderer_knows() -> None:
     """Dashboard.failures is a shared vocabulary, not free text."""
-    layout = pytest.importorskip("app.render.layout")
-    labels = getattr(layout, "FAILURE_LABELS", None)
-    if not isinstance(labels, dict):
-        pytest.skip("layout exposes no FAILURE_LABELS")
-
     known = {
         assemble.SOURCE_BOOKINGS,
         assemble.SOURCE_EVENTS,
@@ -2136,7 +2131,9 @@ def test_failure_names_are_the_names_the_renderer_knows() -> None:
         assemble.SOURCE_TELEMETRY,
         assemble.SOURCE_WEATHER,
     }
-    assert known <= set(labels), f"renderer cannot label {known - set(labels)}"
+    for language, texts in panel_text.CATALOG.items():
+        labels = texts.failure_labels
+        assert known <= set(labels), f"{language} cannot label {known - set(labels)}"
 
 
 # --------------------------------------------------------------------------

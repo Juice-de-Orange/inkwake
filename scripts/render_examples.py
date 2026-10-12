@@ -6,6 +6,9 @@ The README shows what the panel shows, so these frames go through the same
 renderer and PNG encoder as a real wake. Every name, event and caption below
 is invented, and the "photo" is drawn here -- nothing in docs/ comes from a
 real calendar, booking or camera.
+
+The two README frames are English, the default PANEL_LANGUAGE; one German
+frame shows the other language, with German content to match.
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ from app.models import (  # noqa: E402
 )
 from app.render.encode import encode_png  # noqa: E402
 from app.render.layout import render_dashboard  # noqa: E402
+from app.sources.weather import describe  # noqa: E402
 
 DOCS = ROOT / "docs"
 NOW = dt.datetime(2026, 9, 18, 14, 50)
@@ -67,8 +71,44 @@ def _meadow(path: Path) -> Path:
     return path
 
 
-def _dashboard(photo: Path, **overrides: object) -> Dashboard:
+#: Made-up content per language: (events, booking names, sighting).
+CONTENT = {
+    "en": dict(
+        events=[
+            ("19:30", "Summer concert in the park", "City park"),
+            ("10:00", "Farmers' market", "Market square"),
+            (None, "Art week", "Riverside gallery"),
+            ("18:00", "Reading: new short stories", "City library"),
+            ("14:00", "Street festival", "Main square"),
+            ("20:00", "Theatre in the courtyard", "Castle courtyard"),
+        ],
+        family="The Bergs",
+        caption="Rusty is back: the fox crosses the meadow behind the house at dawn.",
+        species="Fox",
+        camera="Meadow cam",
+    ),
+    "de": dict(
+        events=[
+            ("19:30", "Sommerkonzert im Park", "Stadtpark"),
+            ("10:00", "Bauernmarkt", "Marktplatz"),
+            (None, "Kunstwoche", "Galerie am Fluss"),
+            ("18:00", "Lesung: Neue Erzählungen", "Stadtbibliothek"),
+            ("14:00", "Stadtfest", "Hauptplatz"),
+            ("20:00", "Theater im Hof", "Schlosshof"),
+        ],
+        family="Familie Berg",
+        caption="Rusty ist wieder da: der Fuchs quert frühmorgens die Wiese hinter dem Haus.",
+        species="Fuchs",
+        camera="Wiesenkamera",
+    ),
+}
+#: Day offsets of the six events above.
+EVENT_DAYS = (0, 1, 2, 2, 3, 4)
+
+
+def _dashboard(photo: Path, language: str, **overrides: object) -> Dashboard:
     today = NOW.date()
+    content = CONTENT[language]
     base: dict[str, object] = dict(
         now=NOW,
         next_refresh=NEXT,
@@ -80,27 +120,23 @@ def _dashboard(photo: Path, **overrides: object) -> Dashboard:
             humidity_pct=47.0,
             rssi_dbm=-63,
         ),
-        weather=Weather(17.4, 2, "Teilweise bewölkt", 20, 11.0, 19.0),
+        weather=Weather(17.4, 2, describe(2, language), 20, 11.0, 19.0),
         sun=SunTimes(dt.time(6, 51), dt.time(19, 13)),
         bookings=[
             Booking(today - dt.timedelta(days=1), today + dt.timedelta(days=2), 3, "Alex", 2),
-            Booking(dt.date(2026, 9, 26), dt.date(2026, 9, 28), 2, "Familie Berg", 4),
+            Booking(dt.date(2026, 9, 26), dt.date(2026, 9, 28), 2, str(content["family"]), 4),
             Booking(dt.date(2026, 10, 9), dt.date(2026, 10, 10), 1, "Sam", 1),
         ],
         events=[
-            Event(today, "19:30", "Sommerkonzert im Park", "Stadtpark"),
-            Event(today + dt.timedelta(days=1), "10:00", "Bauernmarkt", "Marktplatz"),
-            Event(today + dt.timedelta(days=2), None, "Kunstwoche", "Galerie am Fluss"),
-            Event(today + dt.timedelta(days=2), "18:00", "Lesung: Neue Erzählungen", "Stadtbibliothek"),
-            Event(today + dt.timedelta(days=3), "14:00", "Stadtfest", "Hauptplatz"),
-            Event(today + dt.timedelta(days=4), "20:00", "Theater im Hof", "Schlosshof"),
+            Event(today + dt.timedelta(days=offset), start, title, place)
+            for offset, (start, title, place) in zip(EVENT_DAYS, content["events"])  # type: ignore[call-overload]
         ],
         sighting=Sighting(
             captured_at=dt.datetime(2026, 9, 18, 6, 12),
-            caption="Rusty ist wieder da: der Fuchs quert frühmorgens die Wiese hinter dem Haus.",
-            species="Fuchs",
+            caption=str(content["caption"]),
+            species=str(content["species"]),
             individual="Rusty",
-            camera="Wiesenkamera",
+            camera=str(content["camera"]),
             image_path=str(photo),
         ),
         failures=[],
@@ -114,13 +150,15 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         photo = _meadow(Path(tmp) / "meadow.jpg")
         frames = {
-            "example-frame.png": _dashboard(photo),
+            "example-frame.png": ("en", _dashboard(photo, "en")),
             # Two sources down: the panel keeps what it has and says so in the
             # footer instead of throwing the frame away.
-            "failure-frame.png": _dashboard(photo, weather=None, events=[], failures=["weather", "events"]),
+            "failure-frame.png": ("en", _dashboard(photo, "en", weather=None, events=[],
+                                                   failures=["weather", "events"])),
+            "example-frame-de.png": ("de", _dashboard(photo, "de")),
         }
-        for name, data in frames.items():
-            img = render_dashboard(data, settings)
+        for name, (language, data) in frames.items():
+            img = render_dashboard(data, replace(settings, panel_language=language))
             (DOCS / name).write_bytes(encode_png(img))
             print(f"wrote docs/{name}")
     return 0

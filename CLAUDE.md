@@ -33,8 +33,11 @@ hardware. `?raw=1` returns the 120 000 bytes of packed 4 bpp.
 
 ## Rules
 
-- Code, identifiers, comments, commits and docs in English. The **panel text** is
-  German (headings, weekdays, setup screens); keep new panel strings consistent.
+- Code, identifiers, comments, commits and docs in English. The **panel text**
+  comes from `app/panel_text.py` in the language of `PANEL_LANGUAGE` (`en`
+  default, `de`); a new panel string is a new field there, filled in for every
+  language — never a literal in `layout.py`. `de` renders the bytes 0.1.0
+  rendered. The firmware's own screens (setup, empty battery) are still German.
 - Never write real credentials, hostnames, IP addresses, coordinates of a home or
   personal data into any file, test or fixture. Secrets go into `.env`; test data
   is made up; example hosts use `example.com` / `192.0.2.x`.
@@ -119,7 +122,7 @@ only comes back at the next slot — the other 22 s buy a frame nobody receives.
 `/api/display` therefore uses `assemble.device_budget_s()` (three quarters of
 `DEVICE_HTTP_TIMEOUT_S`); `/preview` and `prewarm()` keep the generous budget.
 With the prewarm working this costs nothing — the cache is minutes old. It is for
-the morning the prewarm failed, where a frame saying "ohne Termine" in the footer
+the morning the prewarm failed, where a frame saying "no events" in the footer
 beats a timeout the board turns into a lost slot.
 
 `DEVICE_HTTP_TIMEOUT_S` is not a preference but a fact about the device on the
@@ -152,7 +155,7 @@ the schema that comes from a datasheet rather than experience:
 **Failure policy.** Sources report errors by *returning normally* with an empty
 value plus a failure name, never by raising into the frame. When everything a
 panel shows comes only from a cache, the footer says so (`Dashboard.failures`). A
-*partial* outage stays in the log on purpose: "ohne Termine" under six visible
+*partial* outage stays in the log on purpose: "no events" under six visible
 events teaches people to ignore hints.
 
 **A failed fetch must not evict a good value.** A source that returns `None` plus

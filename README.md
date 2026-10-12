@@ -13,7 +13,8 @@ Between wakes it draws about 92 µA, so one charge lasts months rather than days
 
 <sub>Rendered by `scripts/render_examples.py` from made-up data, pixel for pixel
 what the board receives. Right: two sources down — the frame keeps the rest and
-says so in the footer.</sub>
+says so in the footer. The panel text is English or German (`PANEL_LANGUAGE`;
+[German example](docs/example-frame-de.png)).</sub>
 
 ## Why
 
@@ -169,9 +170,17 @@ end on real hardware (Wi-Fi, plan, image, refresh, wake timer). Not yet proven o
 hardware: an over-the-air update and the in-wake TLS/timeout guards under real
 failures — see *Known gaps* in [firmware/README.md](firmware/README.md).
 
-The panel text is German (weekday names, headings, the setup screens). Section
-headings are configurable; full localisation is an open issue. Other open ideas
-are tracked as [issues](https://github.com/Juice-de-Orange/inkwake/issues).
+### Known limitations
+
+- One board: the M5Stack PaperColor. Other panels need their own firmware and
+  palette measurements.
+- Panel text in English and German (`PANEL_LANGUAGE`). The firmware's own screens
+  — setup portal, empty battery — are German only.
+- An update is offered when the versions *differ*, downgrades included, and also
+  when a wake carries no battery reading (see [docs/deploy.md](docs/deploy.md#5-over-the-air-firmware-updates)).
+- The footer shortens a long list of failed sources with an ellipsis.
+
+Other open ideas are tracked as [issues](https://github.com/Juice-de-Orange/inkwake/issues).
 
 ## Contributing
 

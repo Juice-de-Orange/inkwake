@@ -88,7 +88,7 @@ def _environment() -> dict[str, str]:
 def _config_env_names() -> set[str]:
     """Every environment variable config.py reads, by name."""
     source = _read(APP / "app" / "config.py")
-    return set(re.findall(r'_env(?:_int|_float|_bool)?\(\s*"([A-Z0-9_]+)"', source))
+    return set(re.findall(r'_env(?:_int|_float|_bool|_choice)?\(\s*"([A-Z0-9_]+)"', source))
 
 
 def _mount_target(mount: str) -> str:
@@ -135,6 +135,18 @@ def test_every_tunable_setting_is_explained_in_env_example() -> None:
     # And the compose-only knobs, which config.py never sees.
     for name in ("INKWAKE_BIND", "INKWAKE_PORT", "SIGHTINGS_HOST_DIR"):
         assert name in documented, name
+
+
+def test_the_panel_language_defaults_to_english_everywhere() -> None:
+    """A new installation speaks English, whichever of the three routes sets it."""
+    assert "PANEL_LANGUAGE" in _config_env_names()
+    assert _environment()["PANEL_LANGUAGE"] == "${PANEL_LANGUAGE:-en}"
+    assert re.search(r"^PANEL_LANGUAGE=en$", _read(ENV_EXAMPLE), re.MULTILINE)
+    # Empty headings fall back to the panel language's; a German default left
+    # in either file would put "Termine" over an English frame.
+    for name in ("BOOKINGS_TITLE", "EVENTS_TITLE", "SIGHTING_TITLE"):
+        assert _environment()[name] == f"${{{name}:-}}", name
+        assert re.search(rf"^{name}=$", _read(ENV_EXAMPLE), re.MULTILINE), name
 
 
 def test_per_device_settings_are_not_also_environment_variables() -> None:
