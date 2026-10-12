@@ -5,8 +5,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-10-11
-
 ### Added
 
 - `device import` registers a board that already holds a token, from the
@@ -33,6 +31,11 @@ All notable changes to this project are documented here. The format follows
   holds, including the timestamp format of its rows.
 - `.env.example`, the compose file and the deploy guide say plainly that the
   default location (Vienna city centre) and time zone are an example to replace.
+
+## [0.1.0] - 2026-10-11
+
+### Added
+
 - First public release. Server: TRMNL BYOS endpoints for the M5Stack PaperColor,
   six-ink colour pipeline, server-side panel care, SQLite device registry with a
   CLI, weather and sun times, iCalendar events, optional bookings and sightings
