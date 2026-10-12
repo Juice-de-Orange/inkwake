@@ -26,6 +26,9 @@ All notable changes to this project are documented here. The format follows
   means the heading of the panel language. A `.env` copied from 0.1.0's
   `.env.example` still sets the German headings explicitly; empty them for
   English headings.
+- The deploy guide covers backing up and restoring the whole data directory
+  (database and firmware images), updating from 0.1.0, and what the database
+  holds, including the timestamp format of its rows.
 - `.env.example`, the compose file and the deploy guide say plainly that the
   default location (Vienna city centre) and time zone are an example to replace.
 - First public release. Server: TRMNL BYOS endpoints for the M5Stack PaperColor,

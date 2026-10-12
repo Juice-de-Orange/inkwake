@@ -251,7 +251,7 @@ an older version needs the backup taken before the update. Read the
   or the headings stay German over English text.
 - The database needs nothing: the schema is unchanged (`PRAGMA user_version` 1),
   devices keep their tokens and settings, and nothing has to be re-flashed.
-- New commands: `device rotate-token` and `device import` (see *Add a device*).
+- New commands: `device rotate-token` and `device import` (see *4. Add a device*).
 
 ### What the database holds
 
@@ -275,7 +275,7 @@ first if you write.
 - `token_hash`: the SHA-256 of the full token `<id>.<secret>`, 64 lowercase hex
   characters. The token itself is stored nowhere.
 - `slots`: a JSON array of wake times in minutes after local midnight, sorted,
-  1 to 8 entries: `[410,890,1190]` is 06:50, 14:50, 19:50.
+  1 to 8 entries: `[410, 890, 1190]` is 06:50, 14:50, 19:50.
 - Flags (`active`, `low_battery`, `is_charging`) are `0`/`1`. CHECK constraints
   enforce the panel-care ranges; a row outside them is refused, not clamped.
 

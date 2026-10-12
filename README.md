@@ -119,7 +119,7 @@ terminates TLS (the firmware verifies certificates against the ESP-IDF CA
 bundle, so use a publicly trusted certificate). **Without a reverse proxy, on a
 trusted LAN, set `INKWAKE_BIND=0.0.0.0` in `.env`** — with the default the
 server answers only on the host itself and the board gets "connection refused".
-Deployment details, the reverse proxy, backups and restore:
+Deployment details, the reverse proxy, backup, restore and updating:
 [docs/deploy.md](docs/deploy.md).
 
 ## Operating it
