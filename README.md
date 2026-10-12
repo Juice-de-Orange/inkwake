@@ -181,6 +181,9 @@ failures — see *Known gaps* in [firmware/README.md](firmware/README.md).
 - An update is offered when the versions *differ*, downgrades included, and also
   when a wake carries no battery reading (see [docs/deploy.md](docs/deploy.md#5-over-the-air-firmware-updates)).
 - The footer shortens a long list of failed sources with an ellipsis.
+- A misspelled setting in `.env` is ignored without a warning: the settings
+  share no prefix, and the compose file passes only the variables it lists into
+  the container. Compare your `.env` with `.env.example` after editing it.
 
 Other open ideas are tracked as [issues](https://github.com/Juice-de-Orange/inkwake/issues).
 
