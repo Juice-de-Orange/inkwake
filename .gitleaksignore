@@ -1,0 +1,3 @@
+# False positive: a made-up device token in a test, introduced as a string
+# literal in this commit and assembled from its parts since (tests/test_cli.py).
+eb4af511e23ccfa79388f9c0b7e0546a5dc38037:tests/test_cli.py:generic-api-key:376

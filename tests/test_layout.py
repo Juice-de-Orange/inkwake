@@ -10,19 +10,25 @@ names, a 120-character German caption as a captioning model writes it, and
 event titles as long as real calendar feeds deliver them -- because that is
 what actually has to fit.
 
+Every test runs once per panel language (the autouse fixture below): the
+English words are wider or narrower than the German ones, and the fitter has
+to hold its floors in both.
+
 Rendered frames land in tests/out/ so a human can look at them.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 from PIL import Image
 
-from app.config import Settings
+from app.config import PANEL_LANGUAGES, Settings
 from app.models import (
     Booking,
     Dashboard,
@@ -32,6 +38,7 @@ from app.models import (
     Telemetry,
     Weather,
 )
+from app.panel_text import ENGLISH, GERMAN
 from app.render import layout, palette
 from app.render.layout import MARGIN, render_dashboard
 
@@ -39,6 +46,25 @@ OUT_DIR = Path(__file__).parent / "out"
 #: With a bookings source configured, as on a board that shows stays. Without
 #: one the bookings section is left out entirely (see its own test).
 SETTINGS = Settings(sources_dsn="postgresql://reader@db.example.invalid/example")
+
+
+
+@pytest.fixture(autouse=True, params=PANEL_LANGUAGES)
+def panel_language(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Every test in this file, in every panel language.
+
+    Three routes carry the language, and all three are switched: SETTINGS,
+    which most tests pass; a Settings() built inside a test, which reads the
+    environment; and the layout's own default for helpers called without one.
+    """
+    language = request.param
+    monkeypatch.setenv("PANEL_LANGUAGE", language)
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "SETTINGS", replace(module.SETTINGS, panel_language=language))
+    monkeypatch.setattr(layout, "default_settings",
+                        replace(layout.default_settings, panel_language=language))
+    return language
+
 
 NOW = dt.datetime(2026, 8, 25, 15, 0)
 NEXT = dt.datetime(2026, 8, 25, 20, 0)
@@ -125,7 +151,7 @@ def _dashboard(**kw) -> Dashboard:
 
 def _save(img: Image.Image, name: str) -> Image.Image:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    img.save(OUT_DIR / f"layout_{name}.png")
+    img.save(OUT_DIR / f"layout_{name}_{SETTINGS.panel_language}.png")
     return img
 
 
@@ -304,25 +330,44 @@ def test_ellipsize_never_exceeds_the_budget():
 
 
 def test_german_date_formatting():
-    assert layout.format_long_date(dt.date(2026, 8, 25)) == "Di 25. August"
+    assert layout.format_long_date(dt.date(2026, 8, 25), GERMAN) == "Di 25. August"
     # Same month: the month is named once, on the departure date.
-    assert layout.format_stay(dt.date(2026, 10, 7), dt.date(2026, 10, 8)) == (
+    assert layout.format_stay(dt.date(2026, 10, 7), dt.date(2026, 10, 8), GERMAN) == (
         "Mi 07. – Do 08. Okt."
     )
     # Across the month boundary both ends carry their month.
-    assert layout.format_stay(dt.date(2026, 9, 30), dt.date(2026, 10, 2)) == (
+    assert layout.format_stay(dt.date(2026, 9, 30), dt.date(2026, 10, 2), GERMAN) == (
         "Mi 30. Sep. – Fr 02. Okt."
     )
-    assert layout._guests(1) == "1 Gast"
-    assert layout._guests(4) == "4 Gäste"
+    assert layout._guests(1, GERMAN) == "1 Gast"
+    assert layout._guests(4, GERMAN) == "4 Gäste"
 
 
-def test_failure_hint_uses_german_source_names():
-    assert layout._failure_hint([]) == ""
-    assert layout._failure_hint(["weather"]) == "ohne Wetter"
-    assert layout._failure_hint(["weather", "events"]) == "ohne Wetter, Termine"
+def test_english_date_formatting():
+    assert layout.format_long_date(dt.date(2026, 8, 25), ENGLISH) == "Tue 25 August"
+    assert layout.format_stay(dt.date(2026, 10, 7), dt.date(2026, 10, 8), ENGLISH) == (
+        "Wed 7 – Thu 8 Oct"
+    )
+    assert layout.format_stay(dt.date(2026, 9, 30), dt.date(2026, 10, 2), ENGLISH) == (
+        "Wed 30 Sep – Fri 2 Oct"
+    )
+    assert layout._guests(1, ENGLISH) == "1 guest"
+    assert layout._guests(4, ENGLISH) == "4 guests"
+
+
+def test_helpers_without_texts_use_the_configured_language(panel_language):
+    expected = {"en": "Tue 25 August", "de": "Di 25. August"}[panel_language]
+    assert layout.format_long_date(dt.date(2026, 8, 25)) == expected
+
+
+def test_failure_hint_names_the_sources_in_the_panel_language():
+    assert layout._failure_hint([], GERMAN) == ""
+    assert layout._failure_hint(["weather"], GERMAN) == "ohne Wetter"
+    assert layout._failure_hint(["weather", "events"], GERMAN) == "ohne Wetter, Termine"
+    assert layout._failure_hint(["weather", "events"], ENGLISH) == "no weather, events"
     # An unknown source name still reaches the reader rather than vanishing.
-    assert layout._failure_hint(["bus"]) == "ohne bus"
+    assert layout._failure_hint(["bus"], GERMAN) == "ohne bus"
+    assert layout._failure_hint(["bus"], ENGLISH) == "no bus"
 
 
 # --------------------------------------------------------------------------
@@ -858,7 +903,7 @@ def test_a_booking_is_one_line():
     assert {line.dy for line in block.lines} == {0}, "the stay spilled onto a second line"
     # The range is the headline and the name has to survive beside it; the
     # guest count is the only part allowed to go when the room runs out.
-    assert any("Okt." in line.text for line in block.lines)
+    assert any(layout._texts(None).months_short[9] in line.text for line in block.lines)
     assert any("Alex" in line.text for line in block.lines)
 
 
@@ -930,7 +975,7 @@ def test_the_venue_reads_as_a_separate_fact():
     assert separated, why
 
 
-def test_an_event_without_a_start_time_prints_only_the_day(tmp_path):
+def test_an_event_without_a_start_time_prints_only_the_day(tmp_path, panel_language):
     """About one scraped entry in twenty has no usable time.
 
     No time is an answer, not a missing value: the day goes out alone rather
@@ -941,7 +986,7 @@ def test_an_event_without_a_start_time_prints_only_the_day(tmp_path):
         NOW.date(), 376,
     )
     kicker = block.lines[0]
-    assert kicker.text == "Do 27. Aug."
+    assert kicker.text == {"de": "Do 27. Aug.", "en": "Thu 27 Aug"}[panel_language]
     assert "·" not in kicker.text and ":" not in kicker.text
 
     img = _typical_with_photo(

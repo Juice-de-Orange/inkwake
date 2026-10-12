@@ -13,7 +13,8 @@ Between wakes it draws about 92 µA, so one charge lasts months rather than days
 
 <sub>Rendered by `scripts/render_examples.py` from made-up data, pixel for pixel
 what the board receives. Right: two sources down — the frame keeps the rest and
-says so in the footer.</sub>
+says so in the footer. The panel text is English or German (`PANEL_LANGUAGE`;
+[German example](docs/example-frame-de.png)).</sub>
 
 ## Why
 
@@ -101,7 +102,9 @@ git clone https://github.com/Juice-de-Orange/inkwake.git
 cd inkwake
 cp .env.example .env            # set PUBLIC_BASE_URL: the address the BOARD reaches the server at,
                                 # e.g. http://192.168.1.20:8099 on a LAN without a domain --
-                                # and then INKWAKE_BIND=0.0.0.0 as well (see below)
+                                # and then INKWAKE_BIND=0.0.0.0 as well (see below);
+                                # WEATHER_LAT/WEATHER_LON/TZ_NAME: your location (the
+                                # example values are Vienna); PANEL_LANGUAGE: en or de
 docker compose up -d --build
 docker compose exec inkwake python -m app.cli device add --label "Hallway"
 ```
@@ -116,7 +119,7 @@ terminates TLS (the firmware verifies certificates against the ESP-IDF CA
 bundle, so use a publicly trusted certificate). **Without a reverse proxy, on a
 trusted LAN, set `INKWAKE_BIND=0.0.0.0` in `.env`** — with the default the
 server answers only on the host itself and the board gets "connection refused".
-Deployment details, the reverse proxy, backups and restore:
+Deployment details, the reverse proxy, backup, restore and updating:
 [docs/deploy.md](docs/deploy.md).
 
 ## Operating it
@@ -169,9 +172,20 @@ end on real hardware (Wi-Fi, plan, image, refresh, wake timer). Not yet proven o
 hardware: an over-the-air update and the in-wake TLS/timeout guards under real
 failures — see *Known gaps* in [firmware/README.md](firmware/README.md).
 
-The panel text is German (weekday names, headings, the setup screens). Section
-headings are configurable; full localisation is an open issue. Other open ideas
-are tracked as [issues](https://github.com/Juice-de-Orange/inkwake/issues).
+### Known limitations
+
+- One board: the M5Stack PaperColor. Other panels need their own firmware and
+  palette measurements.
+- Panel text in English and German (`PANEL_LANGUAGE`). The firmware's own screens
+  — setup portal, empty battery — are German only.
+- An update is offered when the versions *differ*, downgrades included, and also
+  when a wake carries no battery reading (see [docs/deploy.md](docs/deploy.md#5-over-the-air-firmware-updates)).
+- The footer shortens a long list of failed sources with an ellipsis.
+- A misspelled setting in `.env` is ignored without a warning: the settings
+  share no prefix, and the compose file passes only the variables it lists into
+  the container. Compare your `.env` with `.env.example` after editing it.
+
+Other open ideas are tracked as [issues](https://github.com/Juice-de-Orange/inkwake/issues).
 
 ## Contributing
 

@@ -63,8 +63,10 @@ pio device monitor -b 115200       # serial log
 
 ## Conventions
 
-- Code, comments, commit messages and documentation in English; the text on the
-  panel itself is German.
+- Code, comments, commit messages and documentation in English. Every word the
+  server prints on the panel lives in `app/panel_text.py`, in each language
+  (`PANEL_LANGUAGE`, English by default); a new panel string gets an entry in
+  every language, and `tests/test_panel_text.py` checks that.
 - Conventional Commits.
 - Comments explain the trap the code avoids, not what the next line does.
 - No real credentials, hostnames or personal data in code, tests or fixtures.

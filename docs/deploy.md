@@ -17,6 +17,11 @@ load a picture while the server believes it painted one.
 Set `ADMIN_API_KEY` as well (`python3 -c "import secrets; print(secrets.token_urlsafe(32))"`).
 It guards `/preview` and `/api/internal/status`, which render or describe a frame.
 
+Then say where the board hangs: `TZ_NAME`, `WEATHER_LAT` and `WEATHER_LON`
+(decimal degrees). The values in `.env.example` are an example — Vienna city
+centre — and the weather and sun times on the panel are for that place until you
+change them. `PANEL_LANGUAGE` picks the panel text, `en` (default) or `de`.
+
 Everything else is explained in `.env.example`; the data sources are described in
 [data-sources.md](data-sources.md).
 
@@ -70,8 +75,32 @@ docker compose exec inkwake python -m app.cli device add --label "Hallway" --mac
 
 The token is printed once and only its hash is stored. Enter it in the board's
 setup portal together with Wi-Fi and `PUBLIC_BASE_URL` (see
-[firmware/README.md](../firmware/README.md)). A lost token cannot be recovered:
-`device remove`, then `device add` again.
+[firmware/README.md](../firmware/README.md)). A lost token cannot be recovered,
+but it can be replaced:
+
+```bash
+docker compose exec inkwake python -m app.cli device rotate-token <device-id>
+```
+
+prints a new token once and the old one stops working at once. The device keeps
+its id, settings, log and firmware assignment; enter the new token in the board's
+setup portal.
+
+**Moving an existing board to this server.** A board that already holds a
+token from another inkwake server (or from the system inkwake was derived from)
+does not need to be re-provisioned. The row needs the board's device id — the
+part of its token in front of the dot — and the SHA-256 hex of its full token,
+which is what the old database stores. The clear token is never needed and is
+refused:
+
+```bash
+# hash.txt holds one line: the 64 hex characters from the old registry.
+docker compose exec -T inkwake python -m app.cli device import \
+  --id <device-id> --label "Hallway" --slots 06:50,14:50,19:50 --token-hash - < hash.txt
+```
+
+Panel-care and battery thresholds start at the defaults; copy the old values
+with `device set`. Telemetry and the log fill in from the next wake.
 
 Per-device settings (wake times, panel-care and battery thresholds) are changed
 with `device set`; `python -m app.cli device set --help` lists them. The ranges
@@ -126,12 +155,35 @@ gaps* in the firmware README.
 
 ## Backups
 
-Back up the `inkwake_data` volume, or at least `inkwake.sqlite3` in it. It holds
-the device registry including the token hashes; losing it means re-provisioning
-every board. Frames and the calendar cache are rebuilt automatically.
+Everything the server keeps lives in the volume `inkwake_data` (`/data` in the
+container). Two things in it matter:
+
+- `inkwake.sqlite3` — the device registry including the token hashes, the device
+  log and the firmware catalogue. Losing it means re-provisioning every board.
+- `firmware/` — the OTA images registered with `firmware add`.
+
+Frames (`frames/`) and the calendar cache are rebuilt automatically. Keep a copy
+of your `.env` as well; it holds the admin key and possibly a database password
+and private calendar links, so store it like a password.
+
+### The whole data directory
+
+The simplest complete backup. The server is stopped for the few seconds it takes,
+so nothing writes while the archive is made; do it away from a wake time (a wake
+that finds the server down counts as failed and the board retries an hour later).
 
 ```bash
-# SQLite's online backup, so a wake writing at the same moment cannot tear it.
+docker compose stop inkwake
+docker compose run --rm --no-deps -T inkwake tar -C /data -cf - . > inkwake-data.tar
+docker compose start inkwake
+```
+
+### Only the database, while the server runs
+
+SQLite's online backup, so a wake writing at the same moment cannot tear it.
+Firmware images are not included.
+
+```bash
 docker compose exec -T inkwake python -c \
   "import sqlite3; s=sqlite3.connect('/data/inkwake.sqlite3'); d=sqlite3.connect('/tmp/b.sqlite3'); s.backup(d); d.close()"
 docker compose exec -T inkwake cat /tmp/b.sqlite3 > inkwake-backup.sqlite3
@@ -139,36 +191,93 @@ docker compose exec -T inkwake cat /tmp/b.sqlite3 > inkwake-backup.sqlite3
 
 ### Restore
 
-Stop the server, write the file back into the volume, start again:
+**The whole data directory.** Stop the server, empty the volume, unpack the
+archive into it, start again. This works on the existing volume and on a fresh
+one (after `docker compose down -v`, or on a new host: `docker compose run`
+creates the volume).
 
 ```bash
 docker compose stop inkwake
 # A one-off container on the same volume, as the same user the server runs as.
+docker compose run --rm --no-deps -T inkwake sh -c \
+  'find /data -mindepth 1 -delete && tar -C /data -xf -' < inkwake-data.tar
+docker compose up -d
+docker compose exec inkwake python -m app.cli device list
+```
+
+**Only the database.** Stop the server, write the file back into the volume,
+start again:
+
+```bash
+docker compose stop inkwake
 # The -wal/-shm files belong to the database being replaced and must go with it.
 docker compose run --rm -T --no-deps inkwake sh -c \
   'cat > /data/inkwake.sqlite3 && rm -f /data/inkwake.sqlite3-wal /data/inkwake.sqlite3-shm' \
   < inkwake-backup.sqlite3
-docker compose start inkwake
+docker compose up -d
 docker compose exec inkwake python -m app.cli device list
 ```
 
-The devices, their settings and their tokens are back as they were at backup
-time; a device added after the backup is gone and needs `device add` again.
-The firmware *catalogue* is in the database but the image files are not: after
-restoring only `inkwake.sqlite3` onto a fresh volume, remove and re-add each
-image (`firmware remove`, `firmware add`) — until then the server does not offer
-those updates and logs `file … is missing from the firmware dir` on each wake.
-Restoring the whole volume avoids that.
+Either way the devices, their settings and their tokens are back as they were at
+backup time, and the boards authenticate as before; a device added after the
+backup is gone and needs `device add` again. A database-only restore brings the
+firmware *catalogue* back but not the image files: on a fresh volume, remove and
+re-add each image (`firmware remove`, `firmware add`) — until then the server
+does not offer those updates and logs `file … is missing from the firmware dir`
+on each wake.
 
 ## Updating
 
+Back up first (above). Then, in the checkout:
+
 ```bash
-git pull
+git pull                      # or a release: git fetch --tags && git checkout vX.Y.Z
 docker compose up -d --build
+docker compose logs inkwake   # "database schema version … is newer" means: wrong checkout
+docker compose exec inkwake python -m app.cli device list
 ```
 
-The schema is migrated at startup. A database written by a *newer* version is
-refused rather than guessed at, so a rollback needs the matching backup.
+The data volume stays; the registry schema is migrated at startup. A database
+written by a *newer* version is refused rather than guessed at, so going back to
+an older version needs the backup taken before the update. Read the
+[CHANGELOG](../CHANGELOG.md) for settings that changed.
+
+### From 0.1.0
+
+- **The panel is English by default now.** To keep the German panel, add
+  `PANEL_LANGUAGE=de` to `.env`. A `.env` copied from 0.1.0's `.env.example`
+  sets `EVENTS_TITLE=Termine`, `BOOKINGS_TITLE=Buchungen` and
+  `SIGHTING_TITLE=Sichtung`; with `PANEL_LANGUAGE=en` empty those three lines,
+  or the headings stay German over English text.
+- The database needs nothing: the schema is unchanged (`PRAGMA user_version` 1),
+  devices keep their tokens and settings, and nothing has to be re-flashed.
+- New commands: `device rotate-token` and `device import` (see *4. Add a device*).
+
+### What the database holds
+
+For scripts and migrations that read or write the file directly. Stop the server
+first if you write.
+
+| Table | What |
+|---|---|
+| `devices` | One row per board: identity (`id`, `label`, `token_hash`), operator settings, last telemetry and state. |
+| `device_logs` | The last 500 log lines per device (`payload` is JSON). |
+| `firmware` | Registered OTA images; `file_path` is relative to `/data/firmware`. |
+
+- **Timestamps** (`created_at`, `updated_at`, `first_seen_at`, `last_seen_at`,
+  `last_painted_at`, `last_image_fetched_at`, `device_logs.at`, `firmware.created_at`)
+  are TEXT in **UTC, ISO 8601 with an explicit offset**, exactly as Python's
+  `datetime.isoformat()` writes them: `2026-10-12T06:50:03.123456+00:00`, or
+  `2026-10-12T06:50:00+00:00` when the microseconds are zero. The reader also
+  accepts `Z` and a space instead of `T`, and takes a value without offset as UTC —
+  but write the `+00:00` form: the device list is ordered by comparing this text,
+  and mixed spellings sort wrongly.
+- `token_hash`: the SHA-256 of the full token `<id>.<secret>`, 64 lowercase hex
+  characters. The token itself is stored nowhere.
+- `slots`: a JSON array of wake times in minutes after local midnight, sorted,
+  1 to 8 entries: `[410, 890, 1190]` is 06:50, 14:50, 19:50.
+- Flags (`active`, `low_battery`, `is_charging`) are `0`/`1`. CHECK constraints
+  enforce the panel-care ranges; a row outside them is refused, not clamped.
 
 ## Endpoints
 

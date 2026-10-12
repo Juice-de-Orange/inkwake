@@ -21,7 +21,7 @@ import hashlib
 import json
 import re
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
@@ -699,3 +699,54 @@ def test_timestamps_come_back_aware_and_in_utc(sqlite_store: Store) -> None:
     assert painted is not None and painted.last_painted_at is not None
     assert painted.last_painted_at == vienna_noon
     assert painted.last_painted_at.utcoffset() == timedelta(0)
+
+
+def test_import_device_keeps_the_given_id_and_hash(sqlite_store: Store, tmp_path: Path) -> None:
+    digest = hash_device_token("0123456789abcdef0123.secret")
+
+    device = sqlite_store.import_device("0123456789abcdef0123", " Hallway ", digest.upper(), NOW,
+                                        slots=(1190, 410))
+
+    assert device.id == "0123456789abcdef0123"
+    assert device.label == "Hallway"
+    # Stored the way hash_device_token() writes it, or the comparison at
+    # every wake would fail on letter case alone.
+    assert device.token_hash == digest
+    assert device.slots == (410, 1190)
+    assert sqlite_store.get_device(device.id) == device
+
+
+@pytest.mark.parametrize("bad", ["", "ab" * 31, "zz" * 32, "0123456789abcdef0123.secret"],
+                         ids=["empty", "short", "not-hex", "clear-token"])
+def test_import_device_refuses_anything_but_a_sha256_hex(sqlite_store: Store, bad: str) -> None:
+    with pytest.raises(ValueError, match="64 hex characters") as info:
+        sqlite_store.import_device("0123456789abcdef0123", "Hallway", bad, NOW)
+    # Never repeated back: the caller may have pasted the clear token.
+    assert not bad or bad not in str(info.value)
+    assert sqlite_store.list_devices() == []
+
+
+def test_rotate_token_changes_only_the_hash(sqlite_store: Store) -> None:
+    device, old = sqlite_store.create_device("Hallway", NOW)
+    sqlite_store.update_device(device.id, NOW, min_refresh_temp_c=12.0)
+    sqlite_store.record_paint(device.id, "etag", NOW)
+    before = sqlite_store.get_device(device.id)
+    assert before is not None
+
+    new = sqlite_store.rotate_token(device.id, NOW + timedelta(minutes=1))
+
+    assert new is not None and new != old
+    assert new.partition(".")[0] == device.id
+    after = sqlite_store.get_device(device.id)
+    assert after is not None
+    assert after.token_hash == hash_device_token(new) != hash_device_token(old)
+    assert replace(after, token_hash=before.token_hash) == before
+    assert sqlite_store.rotate_token("0" * 20, NOW) is None
+
+
+def test_the_token_stays_out_of_device_set_and_the_service_statements() -> None:
+    """Rotation has its own operator statement; nothing else writes the hash."""
+    assert "token_hash" not in store_module.ADMIN_SETTABLE
+    assert store_module.ADMIN_SQL_ROTATE_TOKEN not in store_module.ALL_STATEMENTS
+    for statement in store_module.ALL_STATEMENTS:
+        assert "token_hash" not in statement, statement

@@ -50,6 +50,18 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+#: Languages the panel text exists in (app/panel_text.py). English first: it is
+#: the default for a new installation.
+PANEL_LANGUAGES: tuple[str, ...] = ("en", "de")
+
+
+def _env_choice(name: str, default: str, choices: tuple[str, ...]) -> str:
+    value = _env(name, default).lower()
+    if value not in choices:
+        raise ValueError(f"{name} must be one of {', '.join(choices)}, got {value!r}")
+    return value
+
+
 def _parse_slots(raw: str) -> tuple[tuple[int, int], ...]:
     """Parse "06:50,14:50,19:50" into ((6, 50), (14, 50), (19, 50)).
 
@@ -155,13 +167,21 @@ class Settings:
     events_count: int = field(default_factory=lambda: _env_int("EVENTS_COUNT", 6))
     events_days_ahead: int = field(default_factory=lambda: _env_int("EVENTS_DAYS_AHEAD", 7))
 
-    #: Section headings printed on the frame.
-    bookings_title: str = field(default_factory=lambda: _env("BOOKINGS_TITLE", "Buchungen"))
-    events_title: str = field(default_factory=lambda: _env("EVENTS_TITLE", "Termine"))
-    sighting_title: str = field(default_factory=lambda: _env("SIGHTING_TITLE", "Sichtung"))
+    #: Language of every text the server prints on the panel: dates, headings,
+    #: weather, footer. The board's own screens (setup portal, empty battery)
+    #: are drawn by the firmware and are not affected.
+    panel_language: str = field(
+        default_factory=lambda: _env_choice("PANEL_LANGUAGE", "en", PANEL_LANGUAGES)
+    )
+    #: Section headings printed on the frame. Empty means the heading of the
+    #: panel language ("Events" / "Termine").
+    bookings_title: str = field(default_factory=lambda: _env("BOOKINGS_TITLE", ""))
+    events_title: str = field(default_factory=lambda: _env("EVENTS_TITLE", ""))
+    sighting_title: str = field(default_factory=lambda: _env("SIGHTING_TITLE", ""))
 
-    #: Location for weather and sun times. The default is only an example
-    #: (Vienna); set your own.
+    #: Location for weather and sun times, decimal degrees. The default is a
+    #: neutral example (Vienna city centre), like TZ_NAME's; .env.example says
+    #: to set your own.
     weather_lat: float = field(default_factory=lambda: _env_float("WEATHER_LAT", 48.2082))
     weather_lon: float = field(default_factory=lambda: _env_float("WEATHER_LON", 16.3738))
 

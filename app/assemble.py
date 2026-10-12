@@ -19,7 +19,8 @@ of ours do - reports them either by returning None or by filling in a
 source database that is merely down returns an empty booking list, which is
 indistinguishable from "nothing is booked" unless somebody asks.
 
-The names put into Dashboard.failures are the keys of layout.FAILURE_LABELS.
+The names put into Dashboard.failures are the keys of `failure_labels` in
+app/panel_text.py.
 Anything else reaches the panel as a raw slug inside the staleness badge.
 
 On top of that sits a small in-process cache. Content is fetched three times a
@@ -50,8 +51,8 @@ from .schedule import next_slot
 log = logging.getLogger(__name__)
 
 #: Names that may appear in Dashboard.failures. These are not free-form: the
-#: renderer looks each one up in FAILURE_LABELS to build the staleness badge,
-#: and an unknown name is printed on the panel verbatim.
+#: renderer looks each one up in `failure_labels` (app/panel_text.py) to build
+#: the staleness badge, and an unknown name is printed on the panel verbatim.
 SOURCE_BOOKINGS = "bookings"
 SOURCE_SIGHTING = "sighting"
 SOURCE_WEATHER = "weather"

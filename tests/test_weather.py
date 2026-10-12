@@ -17,6 +17,8 @@ from typing import Any, Callable
 import httpx
 import pytest
 
+from app import panel_text
+from app.config import settings
 from app.models import Weather
 from app.sources import weather as weather_mod
 from app.sources.weather import (
@@ -161,32 +163,42 @@ def test_daily_block_without_a_matching_date_yields_none(payload: dict[str, Any]
 
 def test_umlauts_survive() -> None:
     """The LED-matrix transliteration must not have come along for the ride."""
-    assert WEATHER_CODES[2] == "Teilw. bewölkt"
-    assert WEATHER_CODES[3] == "Bewölkt"
-    assert "bewoelkt" not in " ".join(WEATHER_CODES.values()).lower()
+    german = panel_text.GERMAN.weather
+    assert german[2] == "Teilw. bewölkt"
+    assert german[3] == "Bewölkt"
+    assert "bewoelkt" not in " ".join(german.values()).lower()
 
 
-def test_code_table_covers_every_wmo_code_open_meteo_emits() -> None:
+@pytest.mark.parametrize("language", sorted(panel_text.CATALOG))
+def test_code_table_covers_every_wmo_code_open_meteo_emits(language: str) -> None:
     emitted = {
         0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67,
         71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99,
     }
-    assert emitted <= set(WEATHER_CODES)
+    assert emitted <= set(panel_text.CATALOG[language].weather)
 
 
-def test_descriptions_fit_the_narrow_column() -> None:
+@pytest.mark.parametrize("language", sorted(panel_text.CATALOG))
+def test_descriptions_fit_the_narrow_column(language: str) -> None:
     """400 px wide panel: a 30-character description has nowhere to go."""
-    assert max(len(v) for v in WEATHER_CODES.values()) <= 22
+    assert max(len(v) for v in panel_text.CATALOG[language].weather.values()) <= 22
 
 
 def test_unknown_code_is_labelled_not_blanked() -> None:
-    assert describe(1234) == "Unbekannt"
+    assert describe(1234, "de") == "Unbekannt"
+    assert describe(1234, "en") == "Unknown"
+
+
+def test_the_table_is_the_configured_languages() -> None:
+    assert WEATHER_CODES == panel_text.CATALOG[settings.panel_language].weather
+    assert describe(61) == WEATHER_CODES[61]
 
 
 def test_description_matches_the_selected_code(payload: dict[str, Any]) -> None:
     w = parse_forecast(payload, at(15))
     assert w is not None
-    assert w.description == "Leichter Regen"
+    assert w.description == describe(61) == {"en": "Light rain", "de": "Leichter Regen"}[
+        settings.panel_language]
 
 
 # --------------------------------------------------------------------------

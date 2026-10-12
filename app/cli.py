@@ -5,13 +5,17 @@
     python -m app.cli device list
     python -m app.cli device set <id> --slots 06:50,19:50 --min-refresh-temp-c 12
     python -m app.cli device remove <id>
+    python -m app.cli device rotate-token <id>
+    python -m app.cli device import --id <id> --label "Hallway" --token-hash - < hash.txt
     python -m app.cli firmware add firmware.bin --version 1.1.0
     python -m app.cli firmware list
     python -m app.cli device set <id> --firmware <firmware-id>
 
 This is the only way a device comes into existence. `device add` prints the
 token exactly once; the database keeps only its SHA-256, so a lost token means
-`device remove` + `device add`, not recovery. Inside the container:
+`device rotate-token` (same device, new token), not recovery. `device import`
+registers a board that already holds a token, from the token's hash -- for
+moving an installation without re-provisioning. Inside the container:
 `docker compose exec app python -m app.cli …`.
 
 The ranges checked here are the same the schema enforces with CHECKs. They are
@@ -31,6 +35,7 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from . import firmware_image
+from .auth import parse_device_token_id
 from .config import settings
 from .store import DbUnavailable, Store, new_row_id, normalize_mac
 
@@ -105,6 +110,10 @@ def _explain_refusal(exc: sqlite3.IntegrityError) -> str:
     text = str(exc)
     if "devices.mac" in text:
         return "a device with this MAC address already exists (see: device list)"
+    if "devices.id" in text:
+        return "a device with this id already exists (see: device list)"
+    if "devices.token_hash" in text:
+        return "another device already has this token hash (see: device list)"
     if "firmware.version" in text:
         return ("this firmware version is already registered (see: firmware list); "
                 "remove it first, or build the image with a new FW_VERSION")
@@ -131,11 +140,59 @@ def cmd_device_add(args: argparse.Namespace) -> int:
     print(f"device created: {device.id}  ({device.label})")
     print(f"wake times:     {_fmt_slots(device.slots)}")
     print()
+    _print_token(token)
+    return 0
+
+
+def _print_token(token: str) -> None:
     print("Device token -- shown once, only its hash is stored:")
     print()
     print(f"    {token}")
     print()
     print("Enter it, together with your server URL, in the board's setup portal.")
+
+
+def _read_token_hash(raw: str) -> str:
+    """`-` reads the hash from stdin, so it stays out of shell history and the
+    process list. The value is never echoed back, not even in an error: a
+    clear token pasted by mistake must not end up in a terminal log."""
+    value = sys.stdin.readline() if raw == "-" else raw
+    value = value.strip()
+    if "." in value:
+        raise ValueError("--token-hash got something shaped like a device token (<id>.<secret>). "
+                         "Give the SHA-256 hex of the token, never the token itself")
+    return value
+
+
+def cmd_device_import(args: argparse.Namespace) -> int:
+    # The id travels in front of the dot of the board's token and is matched
+    # by the same parser at every wake; an id it would not accept is a row no
+    # board could ever authenticate against.
+    if parse_device_token_id(f"{args.id}.x") != args.id:
+        raise ValueError("--id must be hex, at most 64 characters (the part of the token before the dot)")
+    token_hash = _read_token_hash(args.token_hash)
+    slots = parse_slots(args.slots) if args.slots else None
+    if args.mac and not _MAC_RE.fullmatch(normalize_mac(args.mac)):
+        raise ValueError(f"--mac {args.mac!r} is not a MAC address (six hex pairs, AA:BB:CC:DD:EE:FF)")
+    kwargs: dict[str, Any] = {"mac": args.mac, "location": args.location}
+    if slots:
+        kwargs["slots"] = slots
+    device = _store().import_device(args.id, args.label, token_hash, _now(), **kwargs)
+    print(f"device imported: {device.id}  ({device.label})")
+    print(f"wake times:      {_fmt_slots(device.slots)}")
+    print("The board keeps the token it already has. Panel-care and battery settings "
+          "are the defaults; change them with: device set")
+    return 0
+
+
+def cmd_device_rotate_token(args: argparse.Namespace) -> int:
+    token = _store().rotate_token(args.id, _now())
+    if token is None:
+        print(f"no device {args.id}", file=sys.stderr)
+        return 1
+    print(f"new token for {args.id}; the old one stopped working just now.")
+    print()
+    _print_token(token)
     return 0
 
 
@@ -306,6 +363,20 @@ def build_parser() -> argparse.ArgumentParser:
     upd.add_argument("--refresh-jitter-s", type=int)
     upd.add_argument("--ota-min-battery-pct", type=int)
     upd.set_defaults(func=cmd_device_set, active=None)
+
+    imp = device.add_parser("import", help="register a device that already has a token, by the token's hash")
+    imp.add_argument("--id", required=True, help="the device id, i.e. the part of its token before the dot")
+    imp.add_argument("--label", required=True)
+    imp.add_argument("--token-hash", required=True,
+                     help="SHA-256 hex of the full token; '-' reads it from stdin. Never the token itself")
+    imp.add_argument("--mac", help="AA:BB:CC:DD:EE:FF (optional, informational)")
+    imp.add_argument("--location")
+    imp.add_argument("--slots", help="wake times, e.g. 06:50,14:50,19:50")
+    imp.set_defaults(func=cmd_device_import)
+
+    rot = device.add_parser("rotate-token", help="give a device a new token; the old one stops working")
+    rot.add_argument("id")
+    rot.set_defaults(func=cmd_device_rotate_token)
 
     rem = device.add_parser("remove", help="delete a device (its token stops working)")
     rem.add_argument("id")

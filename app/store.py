@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import secrets
 import sqlite3
 from contextlib import contextmanager
@@ -58,6 +59,9 @@ _BUSY_TIMEOUT_S = 5.0
 #: Bumped whenever SCHEMA_SQL changes shape. `migrate()` refuses a file written
 #: by a newer version rather than guessing.
 SCHEMA_VERSION = 1
+
+#: What `hash_device_token()` produces: SHA-256, lowercase hex.
+_HASH_RE = re.compile(r"[0-9a-f]{64}")
 
 #: Default wake times, minutes since local midnight: 06:50, 14:50, 19:50.
 DEFAULT_SLOTS: tuple[int, ...] = (410, 890, 1190)
@@ -420,6 +424,14 @@ ADMIN_SQL_INSERT_DEVICE = """
 
 ADMIN_SQL_DELETE_DEVICE = "DELETE FROM devices WHERE id = :id"
 
+#: Replaces the token and nothing else. Its own statement rather than a column
+#: in ADMIN_SETTABLE: `device set` takes typed values, and a token hash typed in
+#: by hand is a board locked out by a typo. Only `rotate_token()` writes it, with
+#: a hash it computed itself.
+ADMIN_SQL_ROTATE_TOKEN = """
+    UPDATE devices SET token_hash = :token_hash, updated_at = :now WHERE id = :id
+"""
+
 #: Columns the operator may change with `device set`. Anything not in here --
 #: telemetry, state, the token -- is not settable, by construction.
 ADMIN_SETTABLE: tuple[str, ...] = (
@@ -774,6 +786,48 @@ class Store:
         and cannot be shown again -- only its hash is kept."""
         device_id = new_row_id()
         token = new_device_token(device_id)
+        device = self._insert_device(device_id, label, hash_device_token(token), now,
+                                     mac=mac, location=location, slots=slots)
+        return device, token
+
+    def import_device(
+        self,
+        device_id: str,
+        label: str,
+        token_hash: str,
+        now: datetime,
+        *,
+        mac: Optional[str] = None,
+        location: Optional[str] = None,
+        slots: tuple[int, ...] = DEFAULT_SLOTS,
+    ) -> DeviceRecord:
+        """Register a device that already holds a token, by the token's hash.
+
+        For moving a running installation: the board keeps the `<id>.<secret>`
+        it has in NVS, so the row has to carry the same id and the same SHA-256.
+        The plaintext never passes through here -- which is the point, since the
+        operator does not have it either. The schema's UNIQUEs refuse a second
+        row with the same id or the same hash.
+        """
+        digest = (token_hash or "").strip().lower()
+        if not _HASH_RE.fullmatch(digest):
+            # The value is not repeated in the message: what was pasted here may
+            # be the clear token itself.
+            raise ValueError("the token hash must be 64 hex characters (SHA-256 of the full token)")
+        return self._insert_device(device_id, label, digest, now,
+                                   mac=mac, location=location, slots=slots)
+
+    def _insert_device(
+        self,
+        device_id: str,
+        label: str,
+        token_hash: str,
+        now: datetime,
+        *,
+        mac: Optional[str],
+        location: Optional[str],
+        slots: tuple[int, ...],
+    ) -> DeviceRecord:
         with self._connect() as conn:
             conn.execute(
                 ADMIN_SQL_INSERT_DEVICE,
@@ -782,13 +836,33 @@ class Store:
                     "label": label.strip(),
                     "location": (location or "").strip() or None,
                     "mac": normalize_mac(mac) if mac else None,
-                    "token_hash": hash_device_token(token),
+                    "token_hash": token_hash,
                     "slots": json.dumps(sorted(set(slots))),
                     "now": _ts(now),
                 },
             )
             row = conn.execute(SQL_GET_DEVICE, {"id": device_id}).fetchone()
-        return self._row_to_device(row), token
+        return self._row_to_device(row)
+
+    def rotate_token(self, device_id: str, now: datetime) -> Optional[str]:
+        """Give an existing device a new token and return it, or None if there
+        is no such device.
+
+        The old token stops working with this write: authentication reads the
+        row on every request and caches nothing. Settings, telemetry, logs and
+        the firmware assignment stay -- that is what distinguishes this from
+        `remove` + `add`, which also changes the id.
+        """
+        key = (device_id or "").strip()
+        if not key:
+            return None
+        token = new_device_token(key)
+        with self._connect() as conn:
+            cur = conn.execute(
+                ADMIN_SQL_ROTATE_TOKEN,
+                {"id": key, "token_hash": hash_device_token(token), "now": _ts(now)},
+            )
+        return token if cur.rowcount > 0 else None
 
     def update_device(self, device_id: str, now: datetime, **fields: Any) -> Optional[DeviceRecord]:
         """Change operator-owned settings. Unknown or service-owned fields are refused."""

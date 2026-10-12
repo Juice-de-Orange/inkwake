@@ -46,6 +46,7 @@ from PIL.ImageFont import FreeTypeFont
 from ..config import Settings
 from ..config import settings as default_settings
 from ..models import Booking, Dashboard, Event, Sighting, Telemetry
+from ..panel_text import PanelText, plural, texts_for
 from . import palette
 from .palette import BLACK, BLUE, GREEN, RED, WHITE
 
@@ -247,61 +248,50 @@ def wrap_text(
 
 
 # --------------------------------------------------------------------------
-# German formatting
+# Panel text (app/panel_text.py holds the words; this is where they are put)
 # --------------------------------------------------------------------------
 
-# Hard-coded rather than locale-driven: the container has no de_AT locale and
-# setlocale() is process-global, so a locale-formatted date is a bug that only
-# shows up in production.
-WEEKDAYS_SHORT = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
-MONTHS = (
-    "Januar", "Februar", "März", "April", "Mai", "Juni",
-    "Juli", "August", "September", "Oktober", "November", "Dezember",
-)
-MONTHS_SHORT = (
-    "Jan.", "Feb.", "März", "Apr.", "Mai", "Juni",
-    "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez.",
-)
 
-#: Source names as the fetchers report them -> what a human reads in the footer.
-FAILURE_LABELS = {
-    "weather": "Wetter",
-    "sun": "Sonnenzeiten",
-    "bookings": "Buchungen",
-    "events": "Termine",
-    "sighting": "Sichtung",
-    "telemetry": "Sensorwerte",
-}
+def _texts(t: Optional[PanelText]) -> PanelText:
+    """The caller's texts, or the configured language's. Everything below takes
+    `t` from render_dashboard, which resolves it once per frame from its own
+    Settings -- the default is for callers that format a single value."""
+    return t if t is not None else texts_for(default_settings.panel_language)
 
 
-def _weekday(day: date) -> str:
-    return WEEKDAYS_SHORT[day.weekday()]
+def _weekday(day: date, t: Optional[PanelText] = None) -> str:
+    return _texts(t).weekdays_short[day.weekday()]
 
 
-def format_long_date(day: date) -> str:
-    return f"{_weekday(day)} {day.day:02d}. {MONTHS[day.month - 1]}"
+def format_long_date(day: date, t: Optional[PanelText] = None) -> str:
+    t = _texts(t)
+    return t.long_date.format(weekday=_weekday(day, t), day=day.day, month=t.months[day.month - 1])
 
 
-def format_short_date(day: date) -> str:
-    return f"{_weekday(day)} {day.day:02d}. {MONTHS_SHORT[day.month - 1]}"
+def format_short_date(day: date, t: Optional[PanelText] = None) -> str:
+    t = _texts(t)
+    return t.short_date.format(weekday=_weekday(day, t), day=day.day,
+                               month=t.months_short[day.month - 1])
 
 
-def format_stay(arrival: date, departure: date) -> str:
-    """Render a stay as "Mi 07. – Do 08. Okt." - one month name when shared.
+def format_stay(arrival: date, departure: date, t: Optional[PanelText] = None) -> str:
+    """Render a stay as "Wed 7 – Thu 8 Oct" - one month name when shared.
 
     `departure` is the day the flat is free again (models.Booking), so both
     ends are printed as given; no arithmetic happens here.
     """
+    t = _texts(t)
     if arrival.year == departure.year and arrival.month == departure.month:
-        return (
-            f"{_weekday(arrival)} {arrival.day:02d}. – "
-            f"{_weekday(departure)} {departure.day:02d}. {MONTHS_SHORT[departure.month - 1]}"
+        return t.stay_same_month.format(
+            weekday1=_weekday(arrival, t), day1=arrival.day,
+            weekday2=_weekday(departure, t), day2=departure.day,
+            month=t.months_short[departure.month - 1],
         )
-    return f"{format_short_date(arrival)} – {format_short_date(departure)}"
+    return f"{format_short_date(arrival, t)} – {format_short_date(departure, t)}"
 
 
-def _guests(count: int) -> str:
-    return "1 Gast" if count == 1 else f"{count} Gäste"
+def _guests(count: int, t: Optional[PanelText] = None) -> str:
+    return plural(_texts(t).guests, count)
 
 
 def _hhmm(value: datetime) -> str:
@@ -449,18 +439,18 @@ def _draw_battery(p: _Painter, tel: Telemetry, right: int, top: int) -> int:
     return left
 
 
-def _indoor_line(tel: Telemetry) -> str:
+def _indoor_line(tel: Telemetry, t: PanelText) -> str:
     parts: list[str] = []
     if tel.temperature_c is not None:
         parts.append(f"{tel.temperature_c:.1f} °C")
     if tel.humidity_pct is not None:
-        parts.append(f"{tel.humidity_pct:.0f} % rF")
+        parts.append(t.humidity.format(value=tel.humidity_pct))
     if not parts:
         return ""
-    return "Innen " + " · ".join(parts)
+    return t.indoor.format(readings=" · ".join(parts))
 
 
-def _draw_header(p: _Painter, data: Dashboard) -> None:
+def _draw_header(p: _Painter, data: Dashboard, t: PanelText) -> None:
     x0, x1 = MARGIN, p.w - MARGIN
     f_title = load_font(True, _TITLE_SIZE)
     f_body = load_font(False, _BODY_SIZE)
@@ -470,21 +460,21 @@ def _draw_header(p: _Painter, data: Dashboard) -> None:
     # into what is left, so a long month name can never overwrite it.
     bat_left = _draw_battery(p, data.telemetry, right=x1, top=9)
     y = 8
-    p.text((x0, y), ellipsize(format_long_date(data.now.date()), f_title, bat_left - 10 - x0),
+    p.text((x0, y), ellipsize(format_long_date(data.now.date(), t), f_title, bat_left - 10 - x0),
            f_title, BLACK)
     y += line_height(f_title)
 
-    indoor = _indoor_line(data.telemetry)
+    indoor = _indoor_line(data.telemetry, t)
     if indoor:
         p.text((x0, y), ellipsize(indoor, f_body, x1 - x0), f_body, BLACK)
     else:
-        p.text((x0, y), "Innen unbekannt", f_body, BLACK)
+        p.text((x0, y), t.indoor_unknown, f_body, BLACK)
     y += line_height(f_body)
 
     width = x1 - x0
     w = data.weather
     if w is None:
-        p.text((x0, y), "Wetter unbekannt", f_body, BLACK)
+        p.text((x0, y), t.weather_unknown, f_body, BLACK)
     else:
         head = f"{w.temp_c:.1f} °C"
         tail = ""
@@ -502,13 +492,11 @@ def _draw_header(p: _Painter, data: Dashboard) -> None:
 
     meta: list[str] = []
     if w is not None:
-        meta.append(f"Regen {w.precip_prob_pct} %")
+        meta.append(t.rain.format(pct=w.precip_prob_pct))
     if data.sun is not None:
-        meta.append(
-            f"Sonne {data.sun.sunrise:%H:%M}–{data.sun.sunset:%H:%M}"
-        )
+        meta.append(t.sun.format(rise=f"{data.sun.sunrise:%H:%M}", set=f"{data.sun.sunset:%H:%M}"))
     if data.telemetry.rssi_dbm is not None:
-        meta.append(f"WLAN −{abs(data.telemetry.rssi_dbm)} dBm")
+        meta.append(t.wifi.format(dbm=abs(data.telemetry.rssi_dbm)))
     while meta and text_width(" · ".join(meta), f_meta) > width:
         # Dropped from the left, so the WLAN reading is the last thing to go:
         # a missing sunset is cosmetic, a missing RSSI hides a real problem.
@@ -544,7 +532,8 @@ def _draw_heading(p: _Painter, y: int, text: str, colour: tuple[int, int, int],
     return y + _heading_height()
 
 
-def _prepare_booking(booking: Booking, today: date, width: int) -> _Block:
+def _prepare_booking(booking: Booking, today: date, width: int,
+                     t: Optional[PanelText] = None) -> _Block:
     """One stay, one line: the range on the left, who and how many on the right.
 
     This used to be two lines, and with real data the second one read
@@ -553,6 +542,7 @@ def _prepare_booking(booking: Booking, today: date, width: int) -> _Block:
     for that reason (they are the range, restated); the guest count is the
     first thing dropped when a long name needs the room, the range never is.
     """
+    t = _texts(t)
     f_date = load_font(True, _BODY_SIZE)
     f_body = load_font(False, _BODY_SIZE)
     lines: list[_Line] = []
@@ -564,17 +554,17 @@ def _prepare_booking(booking: Booking, today: date, width: int) -> _Block:
     right = width
     if running:
         f_badge = load_font(True, 13)
-        badge_w = text_width("jetzt", f_badge) + 12
+        badge_w = text_width(t.now_badge, f_badge) + 12
         badge_h = line_height(f_badge) + 2
         rects.append((width - badge_w, 1, badge_w, badge_h, RED))
-        lines.append(_Line(width - badge_w + 6, 2, "jetzt", f_badge, WHITE, RED))
+        lines.append(_Line(width - badge_w + 6, 2, t.now_badge, f_badge, WHITE, RED))
         right = width - badge_w - 8
 
-    stay = ellipsize(format_stay(booking.arrival, booking.departure), f_date, right)
+    stay = ellipsize(format_stay(booking.arrival, booking.departure, t), f_date, right)
     lines.append(_Line(0, 0, stay, f_date, BLACK))
 
     room = right - text_width(stay, f_date) - 12
-    guests = f" · {_guests(booking.guests)}"
+    guests = f" · {_guests(booking.guests, t)}"
     # A name cut down to two glyphs plus an ellipsis identifies nobody, so
     # below that the guest count gives up its space rather than the name.
     if room - text_width(guests, f_body) < text_width("Mm…", f_body):
@@ -585,7 +575,8 @@ def _prepare_booking(booking: Booking, today: date, width: int) -> _Block:
     return _Block(height=line_height(f_body) + _BOOKING_GAP, lines=lines, rects=rects)
 
 
-def _prepare_event(event: Event, today: date, width: int, max_title_lines: int = 2) -> _Block:
+def _prepare_event(event: Event, today: date, width: int, max_title_lines: int = 2,
+                   t: Optional[PanelText] = None) -> _Block:
     """Two lines: when and where in small type, then the title in body type.
 
     The venue used to sit directly behind the title in the same row of text,
@@ -598,7 +589,8 @@ def _prepare_event(event: Event, today: date, width: int, max_title_lines: int =
     f_title = load_font(False, _BODY_SIZE)
     lines: list[_Line] = []
 
-    day_txt = "Heute" if event.day == today else format_short_date(event.day)
+    t = _texts(t)
+    day_txt = t.today if event.day == today else format_short_date(event.day, t)
     kicker = ellipsize(f"{day_txt} · {event.start}" if event.start else day_txt, f_meta, width)
     lines.append(_Line(0, 0, kicker, f_meta, BLUE))
     if event.location:
@@ -623,7 +615,8 @@ def _prepare_event(event: Event, today: date, width: int, max_title_lines: int =
 
 
 def _fit_events(events: Sequence[Event], today: date, width: int, top: int,
-                limit: int, title_lines: int = 2) -> tuple[list[_Block], int]:
+                limit: int, title_lines: int = 2,
+                t: Optional[PanelText] = None) -> tuple[list[_Block], int]:
     """Measure as many whole events as fit between `top` and `limit`.
 
     Returns the blocks and how many were left over. Nothing is clipped: on a
@@ -639,12 +632,12 @@ def _fit_events(events: Sequence[Event], today: date, width: int, top: int,
     fitted: list[_Block] = []
     cursor = top
     for event in events:
-        block = _prepare_event(event, today, width, max_title_lines=title_lines)
+        block = _prepare_event(event, today, width, max_title_lines=title_lines, t=t)
         if cursor + block.height > limit:
             # A second title line is usually what does not fit. Cutting the
             # title of the last entry beats dropping the entry entirely.
             if title_lines > 1:
-                block = _prepare_event(event, today, width, max_title_lines=1)
+                block = _prepare_event(event, today, width, max_title_lines=1, t=t)
             if cursor + block.height > limit:
                 break
         fitted.append(block)
@@ -761,7 +754,7 @@ def _tile_ladder(width: int) -> list[tuple[int, int]]:
 
 
 def _measure_sighting(sighting: Sighting, width: int,
-                      tile: Optional[tuple[int, int]]) -> _Block:
+                      tile: Optional[tuple[int, int]], t: Optional[PanelText] = None) -> _Block:
     """Caption block for a given tile size - no image is touched.
 
     Measuring without loading is what lets the fitter try four tile sizes
@@ -780,15 +773,15 @@ def _measure_sighting(sighting: Sighting, width: int,
     else:
         caption_x, caption_w, max_lines, floor_h = 0, width, 3, 0
 
-    caption = sighting.caption or sighting.species or "Sichtung"
+    caption = sighting.caption or sighting.species or _texts(t).sighting_title
     text_lines = wrap_text(caption, f_body, caption_w, max_lines=max_lines)
     lines = [_Line(caption_x, i * lh, text, f_body, BLACK)
              for i, text in enumerate(text_lines)]
     return _Block(height=max(floor_h, len(text_lines) * lh), lines=lines)
 
 
-def _sighting_note(sighting: Sighting) -> str:
-    parts = [f"{_weekday(sighting.captured_at.date())} {sighting.captured_at:%H:%M}"]
+def _sighting_note(sighting: Sighting, t: Optional[PanelText] = None) -> str:
+    parts = [f"{_weekday(sighting.captured_at.date(), t)} {sighting.captured_at:%H:%M}"]
     if sighting.individual:
         parts.append(sighting.individual)
     elif sighting.species:
@@ -803,31 +796,29 @@ def _sighting_note(sighting: Sighting) -> str:
 # --------------------------------------------------------------------------
 
 
-def _failure_hint(failures: Sequence[str]) -> str:
-    names = [FAILURE_LABELS.get(f, f) for f in failures if f]
+def _failure_hint(failures: Sequence[str], t: Optional[PanelText] = None) -> str:
+    t = _texts(t)
+    names = [t.failure_labels.get(f, f) for f in failures if f]
     if not names:
         return ""
-    return "ohne " + ", ".join(names)
+    return t.missing.format(names=", ".join(names))
 
 
-def _draw_footer(p: _Painter, data: Dashboard) -> None:
+def _draw_footer(p: _Painter, data: Dashboard, t: PanelText) -> None:
     font = load_font(False, _META_SIZE)
     width = p.w - 2 * MARGIN
     y = p.h - FOOTER_H
 
-    long_form = (
-        f"Stand {_hhmm(data.now)} · nächste Aktualisierung "
-        f"{_hhmm(data.next_refresh)}"
-    )
-    short_form = f"Stand {_hhmm(data.now)} · nächste {_hhmm(data.next_refresh)}"
-    hint = _failure_hint(data.failures)
+    long_form = t.footer_long.format(now=_hhmm(data.now), next=_hhmm(data.next_refresh))
+    short_form = t.footer_short.format(now=_hhmm(data.now), next=_hhmm(data.next_refresh))
+    hint = _failure_hint(data.failures, t)
 
     if not hint:
         text = long_form
     elif text_width(f"{long_form} · {hint}", font) <= width:
         text = f"{long_form} · {hint}"
     else:
-        # The stale-source hint outranks the word "Aktualisierung": knowing what
+        # The stale-source hint outranks the word "update": knowing what
         # is missing matters more than the polite long form (see models.Dashboard).
         text = f"{short_form} · {hint}"
     p.text((MARGIN, y), ellipsize(text, font, width), font, BLACK)
@@ -854,9 +845,10 @@ def render_dashboard(data: Dashboard, settings: Optional[Settings] = None) -> Im
             "supports; the section minimums assume the native 400x600"
         )
 
+    t = texts_for(cfg.panel_language)
     p = _Painter(width, height)
-    _draw_header(p, data)
-    _draw_footer(p, data)
+    _draw_header(p, data, t)
+    _draw_footer(p, data, t)
 
     x0 = MARGIN
     content_w = width - 2 * MARGIN
@@ -876,9 +868,9 @@ def render_dashboard(data: Dashboard, settings: Optional[Settings] = None) -> Im
     # "Keine Buchungen" would spend a fifth of the panel saying nothing.
     y = body_top
     if cfg.sources_dsn:
-        y = _draw_heading(p, body_top, cfg.bookings_title, RED)
+        y = _draw_heading(p, body_top, cfg.bookings_title or t.bookings_title, RED)
         booking_limit = max(y, body_bottom - MIN_EVENTS_H)
-        booking_blocks = [_prepare_booking(b, today, content_w) for b in data.bookings[:MAX_BOOKINGS]]
+        booking_blocks = [_prepare_booking(b, today, content_w, t) for b in data.bookings[:MAX_BOOKINGS]]
         shown, cursor = 0, y
         for block in booking_blocks:
             if cursor + block.height > booking_limit:
@@ -899,13 +891,12 @@ def render_dashboard(data: Dashboard, settings: Optional[Settings] = None) -> Im
             # that was merely too short would be a lie the reader cannot check --
             # and so would it be while the source cannot be reached.
             unknown = "bookings" in data.failures
-            p.text((x0, y), "Buchungen nicht abrufbar" if unknown else "Keine Buchungen", f_body, BLACK)
+            p.text((x0, y), t.bookings_unavailable if unknown else t.no_bookings, f_body, BLACK)
             y += line_height(f_body) + _BOOKING_GAP
         elif hidden:
             # "weitere" only when something is actually shown above it - a lone
             # "3 weitere Buchungen" under an empty heading reads like a bug.
-            word = "Buchung" if hidden == 1 else "Buchungen"
-            p.text((x0, y), f"{hidden} weitere {word}" if shown else f"{hidden} {word}",
+            p.text((x0, y), plural(t.more_bookings if shown else t.bookings_count, hidden),
                    f_meta, BLACK)
             y += note_h
 
@@ -947,7 +938,8 @@ def render_dashboard(data: Dashboard, settings: Optional[Settings] = None) -> Im
     photo = _open_photo(data.sighting) if data.sighting is not None else None
 
     if data.sighting is None:
-        event_blocks, dropped = _fit_events(data.events, today, content_w, events_top, body_bottom)
+        event_blocks, dropped = _fit_events(data.events, today, content_w, events_top, body_bottom,
+                                            t=t)
     else:
         rungs: list[Optional[tuple[int, int]]] = []
         if photo is not None:
@@ -959,11 +951,11 @@ def render_dashboard(data: Dashboard, settings: Optional[Settings] = None) -> Im
         # draws. Only the combination that wins is ever dithered.
         best: Optional[tuple[int, int, int, int, int]] = None
         for size in rungs:
-            block = _measure_sighting(data.sighting, content_w, size)
+            block = _measure_sighting(data.sighting, content_w, size, t)
             need = heading_h + block.height + SECTION_GAP
             for title_lines in (2, 1):
                 fitted, drop = _fit_events(data.events, today, content_w, events_top,
-                                           body_bottom - need, title_lines)
+                                           body_bottom - need, title_lines, t)
                 score = (
                     min(len(fitted), hard_floor),
                     1 if size else 0,
@@ -988,7 +980,7 @@ def render_dashboard(data: Dashboard, settings: Optional[Settings] = None) -> Im
             # is three rows too optimistic the moment the flat is booked.
             sighting_block, tile_size = None, None
             event_blocks, dropped = _fit_events(data.events, today, content_w,
-                                                events_top, body_bottom)
+                                                events_top, body_bottom, t=t)
 
     sighting_h = heading_h + sighting_block.height + SECTION_GAP if sighting_block else 0
     events_limit = body_bottom - sighting_h
@@ -1000,17 +992,14 @@ def render_dashboard(data: Dashboard, settings: Optional[Settings] = None) -> Im
         if dropped:
             # In the heading rather than under the last entry: the note used to
             # cost a body line, which on this panel is most of an event.
-            word = "weiterer Termin" if dropped == 1 else "weitere Termine"
-            if not event_blocks:
-                word = "Termin" if dropped == 1 else "Termine"
-            note = f"{dropped} {word}"
-        _draw_heading(p, y + SECTION_GAP, cfg.events_title, BLUE, note=note)
+            note = plural(t.more_events if event_blocks else t.events_count, dropped)
+        _draw_heading(p, y + SECTION_GAP, cfg.events_title or t.events_title, BLUE, note=note)
         cursor = events_top
         for block in event_blocks:
             block.draw(p, x0, cursor)
             cursor += block.height
         if not data.events and cursor + line_height(f_body) <= events_limit:
-            p.text((x0, cursor), "Keine Termine", f_body, BLACK)
+            p.text((x0, cursor), t.no_events, f_body, BLACK)
             cursor += line_height(f_body)
         events_end = cursor
 
@@ -1021,12 +1010,13 @@ def render_dashboard(data: Dashboard, settings: Optional[Settings] = None) -> Im
             # The file was there when the size was picked and is not readable
             # now, or the dither module gave up: the caption takes the full
             # width instead. The block only ever shrinks, so nothing overflows.
-            sighting_block = _measure_sighting(data.sighting, content_w, None)
+            sighting_block = _measure_sighting(data.sighting, content_w, None, t)
         # Anchored to the events, not to the bottom edge: whatever the fitter
         # could not spend on an event would otherwise sit here as a visible
         # hole between the last title and the green rule.
         sy = min(events_end + SECTION_GAP, body_bottom - heading_h - sighting_block.height)
-        sy = _draw_heading(p, sy, cfg.sighting_title, GREEN, note=_sighting_note(data.sighting))
+        sy = _draw_heading(p, sy, cfg.sighting_title or t.sighting_title, GREEN,
+                           note=_sighting_note(data.sighting, t))
         if tile is not None:
             p.img.paste(tile, (x0, sy))
         sighting_block.draw(p, x0, sy)

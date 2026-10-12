@@ -42,18 +42,20 @@ services:
       # Guards /preview and /api/internal/status. Both render or describe a
       # frame, and a frame can carry names from the bookings view.
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      PANEL_LANGUAGE: ${PANEL_LANGUAGE:-en}
+      # An example location (Vienna city centre), like TZ_NAME above. Set yours.
       WEATHER_LAT: ${WEATHER_LAT:-48.2082}
       WEATHER_LON: ${WEATHER_LON:-16.3738}
       EVENTS_ICS_URLS: ${EVENTS_ICS_URLS:-}
       EVENTS_COUNT: ${EVENTS_COUNT:-6}
       EVENTS_DAYS_AHEAD: ${EVENTS_DAYS_AHEAD:-7}
-      EVENTS_TITLE: ${EVENTS_TITLE:-Termine}
+      EVENTS_TITLE: ${EVENTS_TITLE:-}
       SOURCES_DSN: ${SOURCES_DSN:-}
       BOOKINGS_VIEW: ${BOOKINGS_VIEW:-inkwake_bookings}
       BOOKINGS_COUNT: ${BOOKINGS_COUNT:-3}
-      BOOKINGS_TITLE: ${BOOKINGS_TITLE:-Buchungen}
+      BOOKINGS_TITLE: ${BOOKINGS_TITLE:-}
       SIGHTINGS_VIEW: ${SIGHTINGS_VIEW:-inkwake_sightings}
-      SIGHTING_TITLE: ${SIGHTING_TITLE:-Sichtung}
+      SIGHTING_TITLE: ${SIGHTING_TITLE:-}
       SOURCE_CACHE_TTL_S: ${SOURCE_CACHE_TTL_S:-3600}
       HTTP_TIMEOUT_S: ${HTTP_TIMEOUT_S:-15.0}
       # Mirror of HTTP_TIMEOUT_MS in firmware/src/config.h. Not a setting but
