@@ -16,6 +16,8 @@ what the board receives. Right: two sources down — the frame keeps the rest an
 says so in the footer. The panel text is English or German (`PANEL_LANGUAGE`;
 [German example](docs/example-frame-de.png)).</sub>
 
+Built with AI assistance.
+
 ## Why
 
 Colour e-ink is lovely on a wall and awkward everywhere else. The panel needs
@@ -192,14 +194,6 @@ Other open ideas are tracked as [issues](https://github.com/Juice-de-Orange/inkw
 Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 Issues labelled `good first issue` are a good place to start. Please report
 security problems privately, as described in [SECURITY.md](SECURITY.md).
-
-## Built with Claude Code
-
-Most of inkwake was written in pair-programming sessions with
-[Claude Code](https://claude.com/claude-code), Anthropic's coding agent: research
-into the hardware, implementation, tests and audits. Architecture, review and
-release decisions are the maintainer's. [`CLAUDE.md`](CLAUDE.md) is the working
-agreement the agent follows in this repository.
 
 ## License
 
