@@ -260,4 +260,10 @@ class Settings:
         return self.data_dir / "firmware"
 
 
-settings = Settings()
+try:
+    settings = Settings()
+except ValueError as exc:
+    # A typo in .env is the usual cause, and the message already names the
+    # variable and the allowed values. Uncaught, it arrived at the end of a
+    # 55-line uvicorn traceback, once per restart of the container.
+    raise SystemExit(f"inkwake: {exc}") from None
