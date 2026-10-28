@@ -999,7 +999,10 @@ def render_dashboard(data: Dashboard, settings: Optional[Settings] = None) -> Im
             block.draw(p, x0, cursor)
             cursor += block.height
         if not data.events and cursor + line_height(f_body) <= events_limit:
-            p.text((x0, cursor), t.no_events, f_body, BLACK)
+            # Same rule as the bookings: "Keine Termine" only when the calendars
+            # said so, not when none of them could be asked.
+            unknown = "events" in data.failures
+            p.text((x0, cursor), t.events_unavailable if unknown else t.no_events, f_body, BLACK)
             cursor += line_height(f_body)
         events_end = cursor
 
