@@ -65,6 +65,7 @@ class PanelText:
     bookings_count: tuple[str, str]
     more_events: tuple[str, str]
     events_count: tuple[str, str]
+    events_unavailable: str
     no_events: str
 
     # -- footer -------------------------------------------------------------
@@ -119,6 +120,7 @@ ENGLISH = PanelText(
     bookings_count=("{n} booking", "{n} bookings"),
     more_events=("{n} more event", "{n} more events"),
     events_count=("{n} event", "{n} events"),
+    events_unavailable="Events unavailable",
     no_events="No events",
     footer_long="As of {now} · next update {next}",
     footer_short="As of {now} · next {next}",
@@ -197,6 +199,7 @@ GERMAN = PanelText(
     bookings_count=("{n} Buchung", "{n} Buchungen"),
     more_events=("{n} weiterer Termin", "{n} weitere Termine"),
     events_count=("{n} Termin", "{n} Termine"),
+    events_unavailable="Termine nicht abrufbar",
     no_events="Keine Termine",
     footer_long="Stand {now} · nächste Aktualisierung {next}",
     footer_short="Stand {now} · nächste {next}",

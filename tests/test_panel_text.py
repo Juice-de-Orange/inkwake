@@ -115,7 +115,8 @@ def test_every_template_formats_with_its_documented_fields(language: str) -> Non
 def _dashboards(language: str) -> list[Dashboard]:
     """Content without a word of either language, covering every text branch:
     the running-stay badge, hidden stays, today, a dropped event, every failure
-    label, unknown readings, no events, and the sighting fallback caption."""
+    label, unknown readings, no events, unreachable calendars, and the sighting
+    fallback caption."""
     today = NOW.date()
     weather = Weather(17.4, 61, describe(61, language), 20, 11.0, 19.0)
     full = Dashboard(
@@ -136,7 +137,9 @@ def _dashboards(language: str) -> list[Dashboard]:
     empty = Dashboard(now=NOW, next_refresh=NEXT, telemetry=Telemetry(device_id="x"),
                       failures=["bookings"])
     quiet = Dashboard(now=NOW, next_refresh=NEXT, telemetry=Telemetry(device_id="x"))
-    return [full, empty, quiet]
+    no_calendar = Dashboard(now=NOW, next_refresh=NEXT, telemetry=Telemetry(device_id="x"),
+                            failures=["events"])
+    return [full, empty, quiet, no_calendar]
 
 
 def _drawn_texts(monkeypatch: pytest.MonkeyPatch, language: str) -> list[str]:
@@ -173,7 +176,8 @@ def test_english_frame_says_what_it_should(monkeypatch: pytest.MonkeyPatch) -> N
     for expected in ("Tue 25 August", "Indoor 21.8 °C · 47 % RH", "Light rain", "Rain 20 %",
                      "Wi-Fi −63 dBm", "Bookings", "now", "Today", "Events", "more events",
                      "As of 15:00", "no weather", "Sighting", "Bookings unavailable",
-                     "No events", "Indoor unknown", "Weather unknown", "No bookings"):
+                     "No events", "Events unavailable", "Indoor unknown", "Weather unknown",
+                     "No bookings"):
         assert expected in drawn, expected
 
 
@@ -182,7 +186,8 @@ def test_german_frame_keeps_the_0_1_0_wording(monkeypatch: pytest.MonkeyPatch) -
     for expected in ("Di 25. August", "Innen 21.8 °C · 47 % rF", "Leichter Regen", "Regen 20 %",
                      "WLAN −63 dBm", "Buchungen", "jetzt", "Heute", "Termine",
                      "weitere Termine", "Stand 15:00", "ohne Wetter", "Sichtung",
-                     "Buchungen nicht abrufbar", "Keine Termine", "Innen unbekannt",
+                     "Buchungen nicht abrufbar", "Keine Termine", "Termine nicht abrufbar",
+                     "Innen unbekannt",
                      "Wetter unbekannt", "Keine Buchungen"):
         assert expected in drawn, expected
 
