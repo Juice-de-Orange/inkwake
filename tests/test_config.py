@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -75,3 +78,16 @@ def test_an_unknown_panel_language_names_the_choices(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("PANEL_LANGUAGE", "fr")
     with pytest.raises(ValueError, match="PANEL_LANGUAGE must be one of en, de"):
         Settings()
+
+
+def test_a_bad_setting_stops_the_server_with_one_line(tmp_path: Path) -> None:
+    """The real start command: no traceback, the message, a non-zero exit."""
+    env = {**os.environ, "PANEL_LANGUAGE": "xx", "DATA_DIR": str(tmp_path)}
+    done = subprocess.run(
+        [sys.executable, "-m", "uvicorn", "app.main:app", "--port", "0"],
+        capture_output=True, text=True, timeout=60, env=env,
+        cwd=Path(__file__).resolve().parent.parent,
+    )
+    assert done.returncode != 0
+    assert "Traceback" not in done.stderr
+    assert done.stderr.strip() == "inkwake: PANEL_LANGUAGE must be one of en, de, got 'xx'"
